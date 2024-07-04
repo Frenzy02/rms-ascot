@@ -3,15 +3,10 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 
 export const useAuthUserStore = create(
     persist(
-        (set, get) => ({
+        (set) => ({
             authUser: null,
             setAuthUser: (payload) => set(() => ({ authUser: payload })),
-            clearAuthUser: () => set({ authUser: null }),
-
-            signOut: () =>
-                set({
-                    authUser: null
-                })
+            clearAuthUser: () => set({ authUser: null })
         }),
         {
             name: 'iot-auth-user',

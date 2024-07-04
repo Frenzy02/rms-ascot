@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import { checkIfEmailExist } from '@/services/api/user-management'
 import { validatePassword } from '@/utils/user'
@@ -8,7 +8,12 @@ import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import {
+    GoogleAuthProvider,
+    GithubAuthProvider,
+    signInWithPopup,
+    onAuthStateChanged
+} from 'firebase/auth'
 import { auth } from '@/services/api/firebase'
 
 export default function LogIn() {
@@ -21,6 +26,16 @@ export default function LogIn() {
     const { setAuthUser } = useAuthUserStore((state) => ({
         setAuthUser: state.setAuthUser
     }))
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in, redirect to dashboard
+                router.push('/')
+            }
+        })
+        return () => unsubscribe()
+    }, [router])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -65,8 +80,19 @@ export default function LogIn() {
 
         try {
             const result = await signInWithPopup(auth, provider)
+            const user = result.user
             // Handle successful sign-in here
-            router.push('/')
+            if (user) {
+                const userData = {
+                    email: user.email,
+                    displayName: user.displayName,
+                    uid: user.uid
+                    // Add other user properties if needed
+                }
+                setAuthUser(userData)
+                router.push('/')
+                toast.success('You have successfully logged in.')
+            }
         } catch (error) {
             if (
                 error.code === 'auth/cancelled-popup-request' ||
@@ -76,6 +102,41 @@ export default function LogIn() {
             } else {
                 toast.error('An error occurred during Google sign-in.')
                 console.error('Google sign-in error:', error)
+            }
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleGithub = async (e) => {
+        e.preventDefault()
+        setIsLoading(true)
+        const provider = new GithubAuthProvider()
+
+        try {
+            const result = await signInWithPopup(auth, provider)
+            const user = result.user
+            // Handle successful sign-in here
+            if (user) {
+                const userData = {
+                    email: user.email,
+                    displayName: user.displayName,
+                    uid: user.uid
+                    // Add other user properties if needed
+                }
+                setAuthUser(userData)
+                router.push('/')
+                toast.success('You have successfully logged in.')
+            }
+        } catch (error) {
+            if (
+                error.code === 'auth/cancelled-popup-request' ||
+                error.code === 'auth/popup-closed-by-user'
+            ) {
+                toast.error('Popup closed before completing sign in.')
+            } else {
+                toast.error('An error occurred during Github sign-in.')
+                console.error('Github sign-in error:', error)
             }
         } finally {
             setIsLoading(false)
@@ -160,6 +221,7 @@ export default function LogIn() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <Button
+                            onClick={handleGithub}
                             variant="outline"
                             className="flex items-center justify-center">
                             <GithubIcon className="mr-2 h-5 w-5" />
@@ -188,13 +250,12 @@ function ChromeIcon(props) {
             height="24"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke="#EA4335"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="4" />
-            <line x1="21.17" x2="12" y1="8" y2="8" />
+            <circle cx="12" cy="12" r="4" fill="#FBBC05" />
             <line x1="3.95" x2="8.54" y1="6.06" y2="14" />
             <line x1="10.88" x2="15.46" y1="21.94" y2="14" />
         </svg>
@@ -210,7 +271,7 @@ function GithubIcon(props) {
             height="24"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke="#333"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round">

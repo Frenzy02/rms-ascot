@@ -1,19 +1,33 @@
 'use client'
+import React from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'react-toastify'
+import { auth } from '@/services/api/firebase'
+import { useAuthUserStore } from '@/store/user'
+import { Button } from '@/components/ui/button'
 
-export const Home = (props) => {
-    const { user, signOut } = props
+export default function Dashboard() {
+    const router = useRouter()
+    const { clearAuthUser } = useAuthUserStore((state) => ({
+        clearAuthUser: state.clearAuthUser
+    }))
+
+    const handleSignOut = async () => {
+        try {
+            await auth.signOut()
+            clearAuthUser()
+            router.push('/log-in')
+            toast.success('Successfully signed out.')
+        } catch (error) {
+            toast.error('Error signing out. Please try again.')
+        }
+    }
 
     return (
-        <main className="flex min-h-screen flex-col items-center justify-between p-24">
-            <a
-                href="/"
-                onClick={() => {
-                    signOut()
-                }}>
+        <div className="dashboard">
+            <Button onClick={handleSignOut} className="sign-out-button">
                 Sign Out
-            </a>
-        </main>
+            </Button>
+        </div>
     )
 }
-
-export default Home
