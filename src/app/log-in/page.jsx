@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { toast } from 'react-toastify'
 import { checkIfEmailExist } from '@/services/api/user-management'
 import { validatePassword } from '@/utils/user'
@@ -7,8 +7,12 @@ import { useAuthUserStore } from '@/store/user'
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { useRouter } from 'next/navigation'
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import { auth } from '@/services/api/firebase'
 
 export default function LogIn() {
+    const router = useRouter()
     const [isLoading, setIsLoading] = useState(false)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -35,9 +39,9 @@ export default function LogIn() {
 
                     setAuthUser(userData)
 
-                    // Redirect logic
+                    // Redirect logic using useRouter
                     if (userData.userType === 'user') {
-                        window.location.href = '/'
+                        router.push('/')
                     }
 
                     toast.success('You have successfully logged in.')
@@ -49,6 +53,30 @@ export default function LogIn() {
             }
         } catch (error) {
             toast.error('An error occurred while checking if the email exists.')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleGoogle = async (e) => {
+        e.preventDefault()
+        setIsLoading(true)
+        const provider = new GoogleAuthProvider()
+
+        try {
+            const result = await signInWithPopup(auth, provider)
+            // Handle successful sign-in here
+            router.push('/')
+        } catch (error) {
+            if (
+                error.code === 'auth/cancelled-popup-request' ||
+                error.code === 'auth/popup-closed-by-user'
+            ) {
+                toast.error('Popup closed before completing sign in.')
+            } else {
+                toast.error('An error occurred during Google sign-in.')
+                console.error('Google sign-in error:', error)
+            }
         } finally {
             setIsLoading(false)
         }
@@ -138,6 +166,7 @@ export default function LogIn() {
                             GitHub
                         </Button>
                         <Button
+                            onClick={handleGoogle}
                             variant="outline"
                             className="flex items-center justify-center">
                             <ChromeIcon className="mr-2 h-5 w-5" />

@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { notification } from '@/utils/notifications'
 import { hashPassword } from '@/utils/user'
+import { useRouter } from 'next/navigation'
 
 const defaultFields = {
     email: '',
@@ -54,12 +55,7 @@ export default function SignUp() {
                                     ' Successfully! Update Information ',
                                 {
                                     onClose: () => {
-                                        setTimeout(
-                                            () =>
-                                                (window.location.href =
-                                                    '/log-in'),
-                                            2000
-                                        )
+                                        setTimeout(() => router.push('/'), 2000)
                                     }
                                 }
                             )
