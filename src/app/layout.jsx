@@ -24,7 +24,6 @@ export default function RootLayout({ children }) {
                 </Head>
                 <body className={montserrat.className}>
                     <ToastContainer />
-
                     {children}
                 </body>
             </>

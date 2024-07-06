@@ -1,17 +1,16 @@
 'use client'
 import React, { useState } from 'react'
+import { auth } from '@/services/api/firebase'
 import {
-    checkIfEmailExist,
-    registerUser,
-    updateUser
-} from '@/services/api/user-management'
+    createUserWithEmailAndPassword,
+    sendEmailVerification
+} from 'firebase/auth'
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { notification } from '@/utils/notifications'
-import { hashPassword } from '@/utils/user'
 import { useRouter } from 'next/navigation'
 
 const defaultFields = {
@@ -24,6 +23,7 @@ export default function SignUp() {
     const [userInfo, setUserInfo] = useState(defaultFields)
     const userInfoFieldsKeys = Object.keys(defaultFields)
     const [isLoading, setIsLoading] = useState(false)
+    const router = useRouter()
 
     const registerUsers = async (e) => {
         e.preventDefault()
@@ -38,75 +38,41 @@ export default function SignUp() {
             }
 
             setIsLoading(true)
-            // Check if the email already exists
-            const existingUser = await checkIfEmailExist(userInfo.email)
 
-            if (existingUser) {
-                // Update the user information
-                const payload = userInfo
-                delete payload.confirmPassword // Remove confirmPassword field
+            try {
+                const userCredential = await createUserWithEmailAndPassword(
+                    auth,
+                    userInfo.email,
+                    userInfo.password
+                )
 
-                await updateUser(existingUser.email, payload).then((res) => {
-                    try {
-                        if (res) {
-                            notification(
-                                'success',
-                                res.email +
-                                    ' Successfully! Update Information ',
-                                {
-                                    onClose: () => {
-                                        setTimeout(() => router.push('/'), 2000)
-                                    }
-                                }
-                            )
+                const user = userCredential.user
+                await sendEmailVerification(user)
+
+                notification(
+                    'success',
+                    'Registration successful! Please check your email to verify your account.',
+                    {
+                        onClose: () => {
+                            setTimeout(() => router.push('/log-in'), 2000)
                         }
-                    } catch (err) {
-                        notification(
-                            'error',
-                            'An error encountered while user is trying to update user information.'
-                        )
                     }
-                    setIsLoading(false)
-                })
-            } else {
-                // Register a new user
-                const payload = userInfo
-                payload.userType = 'user'
-                payload.password = await hashPassword(payload.password)
-                delete payload.confirmPassword // Remove confirmPassword field
+                )
 
-                notification('info', 'Submitting user information...')
-
-                await registerUser(payload).then((res) => {
-                    try {
-                        if (res) {
-                            notification(
-                                'success',
-                                res.email + ' registered successfully!',
-                                {
-                                    onClose: () => {
-                                        setTimeout(
-                                            () =>
-                                                (window.location.href =
-                                                    '/log-in'),
-                                            2000
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    } catch (err) {
-                        notification(
-                            'error',
-                            'An error encountered while user is trying to register.'
-                        )
-                    }
-                    setIsLoading(false)
-                })
+                // Reset the form
+                setUserInfo(defaultFields)
+            } catch (error) {
+                if (error.code === 'auth/weak-password') {
+                    notification(
+                        'error',
+                        'Password should be at least 6 characters.'
+                    )
+                } else {
+                    notification('error', error.message)
+                }
+            } finally {
+                setIsLoading(false)
             }
-
-            // Reset the form
-            setUserInfo(defaultFields)
         } else {
             notification('error', 'Some fields are empty.')
         }

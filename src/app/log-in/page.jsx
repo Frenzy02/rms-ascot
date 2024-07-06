@@ -1,8 +1,6 @@
 'use client'
 import React, { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
-import { checkIfEmailExist } from '@/services/api/user-management'
-import { validatePassword } from '@/utils/user'
 import { useAuthUserStore } from '@/store/user'
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
@@ -12,6 +10,7 @@ import {
     GoogleAuthProvider,
     GithubAuthProvider,
     signInWithPopup,
+    signInWithEmailAndPassword,
     onAuthStateChanged
 } from 'firebase/auth'
 import { auth } from '@/services/api/firebase'
@@ -42,32 +41,40 @@ export default function LogIn() {
         setIsLoading(true)
 
         try {
-            const userDataRes = await checkIfEmailExist(email)
-            if (userDataRes) {
-                const isValidPassword = await validatePassword(
-                    password,
-                    userDataRes.password
-                )
-                if (isValidPassword) {
-                    const userData = { ...userDataRes }
-                    delete userData.password
-
-                    setAuthUser(userData)
-
-                    // Redirect logic using useRouter
-                    if (userData.userType === 'user') {
-                        router.push('/')
-                    }
-
-                    toast.success('You have successfully logged in.')
-                } else {
-                    toast.error('Invalid account credentials.')
+            const userCredential = await signInWithEmailAndPassword(
+                auth,
+                email,
+                password
+            )
+            const user = userCredential.user
+            // Handle successful sign-in here
+            if (user) {
+                const userData = {
+                    email: user.email,
+                    displayName: user.displayName,
+                    uid: user.uid
+                    // Add other user properties if needed
                 }
-            } else {
-                toast.error('Sorry, user does not exist!')
+                setAuthUser(userData)
+                router.push('/')
+                toast.success('You have successfully logged in.')
             }
         } catch (error) {
-            toast.error('An error occurred while checking if the email exists.')
+            switch (error.code) {
+                case 'auth/user-not-found':
+                    toast.error('User not found.')
+                    break
+                case 'auth/wrong-password':
+                    toast.error('Incorrect password.')
+                    break
+                case 'auth/too-many-requests':
+                    toast.error('Too many requests. Try again later.')
+                    break
+                default:
+                    toast.error('An error occurred during sign-in.')
+                    console.error('Sign-in error:', error)
+                    break
+            }
         } finally {
             setIsLoading(false)
         }
@@ -195,13 +202,15 @@ export default function LogIn() {
                             <div className="flex items-center"></div>
                             <div className="text-sm">
                                 <Link
-                                    href="#"
+                                    href="/resetPassword"
+                                    id="reset"
                                     className="font-medium text-primary text-white hover:underline"
                                     prefetch={false}>
                                     Forgot your password?
                                 </Link>
                             </div>
                         </div>
+
                         <Button
                             type="submit"
                             disabled={isLoading}
@@ -250,12 +259,13 @@ function ChromeIcon(props) {
             height="24"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#EA4335"
+            stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="4" fill="#FBBC05" />
+            <circle cx="12" cy="12" r="4" />
+            <line x1="21.17" x2="12" y1="8" y2="8" />
             <line x1="3.95" x2="8.54" y1="6.06" y2="14" />
             <line x1="10.88" x2="15.46" y1="21.94" y2="14" />
         </svg>
@@ -271,7 +281,7 @@ function GithubIcon(props) {
             height="24"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#333"
+            stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round">

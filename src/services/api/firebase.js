@@ -1,13 +1,9 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from 'firebase/app'
-import { getAnalytics } from 'firebase/analytics'
 import { getFirestore } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import dynamic from 'next/dynamic'
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
     apiKey: 'AIzaSyBNVP0zMDrZBtvabqcNTqSxwoJtEcb9mC0',
     authDomain: 'iot-web-app-7476f.firebaseapp.com',
@@ -20,11 +16,17 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig)
-
-const analytics = getAnalytics(app)
-
 export const firedb = getFirestore(app)
-
 export const auth = getAuth(app)
 
-export const firestore = getFirestore(app)
+// Conditionally initialize analytics if in the browser
+export const analytics =
+    typeof window !== 'undefined'
+        ? dynamic(
+              () =>
+                  import('firebase/analytics').then((module) =>
+                      module.getAnalytics(app)
+                  ),
+              { ssr: false }
+          )
+        : null
