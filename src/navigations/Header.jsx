@@ -142,7 +142,6 @@ export default function Header() {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Avatar className="h-9 w-9">
-                            <AvatarImage src="/placeholder-user.jpg" />
                             <AvatarFallback>{getInitials()}</AvatarFallback>
                         </Avatar>
                     </DropdownMenuTrigger>

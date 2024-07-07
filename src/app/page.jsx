@@ -1,6 +1,15 @@
 'use client'
-import React from 'react'
+import { useRequireAuth } from '@/utils/auth'
 
-export default function Dashboard() {
-    return <div className="dashboard"></div>
+const Home = () => {
+    useRequireAuth()
+
+    return (
+        <div>
+            <h1>Welcome to the App</h1>
+            {/* Your main application content */}
+        </div>
+    )
 }
+
+export default Home
