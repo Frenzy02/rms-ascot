@@ -1,8 +1,8 @@
 import 'react-toastify/dist/ReactToastify.css'
 import { Montserrat } from 'next/font/google'
 import './globals.css'
-import Head from 'next/head'
 import { ToastContainer } from 'react-toastify'
+import Header from '@/navigations/Header'
 
 const montserrat = Montserrat({
     subsets: ['latin']
@@ -16,17 +16,16 @@ export const metadata = {
 export default function RootLayout({ children }) {
     return (
         <html lang="en">
-            <>
-                <Head>
-                    <title>{metadata.title}</title>
-                    <meta name="description" content={metadata.description} />
-                    <link rel="icon" href="/favicon.ico" />
-                </Head>
-                <body className={montserrat.className}>
-                    <ToastContainer />
-                    {children}
-                </body>
-            </>
+            <head>
+                <title>{metadata.title}</title>
+                <meta name="description" content={metadata.description} />
+                <link rel="icon" href="/favicon.ico" />
+            </head>
+            <body className={montserrat.className}>
+                <ToastContainer />
+                <Header />
+                {children}
+            </body>
         </html>
     )
 }
