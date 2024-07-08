@@ -8,7 +8,7 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuthUserStore } from '@/store/user'
 import { useEffect, useState } from 'react'
 import { whiteListedPaths } from '@/constant/whitelist'

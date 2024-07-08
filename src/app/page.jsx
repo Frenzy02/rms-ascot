@@ -1,7 +1,7 @@
 'use client'
 import { useRequireAuth } from '@/utils/auth'
 
-const Home = () => {
+export default function Home() {
     useRequireAuth()
 
     return (
@@ -11,5 +11,3 @@ const Home = () => {
         </div>
     )
 }
-
-export default Home
