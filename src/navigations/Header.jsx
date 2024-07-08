@@ -80,48 +80,59 @@ export default function Header() {
 
     return (
         <header
-            className={`flex items-center justify-between px-6 py-4 w-full transition-colors duration-300 ${
+            className={`fixed top-0 left-0 right-0 flex items-center justify-between px-6 py-4 w-full transition-colors opacity-80 duration-300 ${
                 isDarkMode
                     ? 'bg-[#1a1b1e] text-white'
                     : 'bg-white text-[#1a1b1e] shadow-md'
-            }`}>
-            <Link href="#" className="flex items-center gap-2" prefetch={false}>
+            }`}
+            style={{ zIndex: 1000 }}>
+            <Link href="/" className="flex items-center gap-2" prefetch={false}>
                 <MountainIcon className="h-6 w-6" />
                 <span className="text-lg font-bold">Gelo</span>
             </Link>
             <nav className="hidden md:flex items-center gap-6">
-                <Link
-                    href="#"
-                    className={`text-sm font-medium hover:underline underline-offset-4 transition-colors duration-300 ${
-                        isDarkMode ? 'text-white' : 'text-[#1a1b1e]'
-                    }`}
-                    prefetch={false}>
-                    Home
-                </Link>
-                <Link
-                    href="#"
-                    className={`text-sm font-medium hover:underline underline-offset-4 transition-colors duration-300 ${
-                        isDarkMode ? 'text-white' : 'text-[#1a1b1e]'
-                    }`}
-                    prefetch={false}>
-                    About Us
-                </Link>
-                <Link
-                    href="#"
-                    className={`text-sm font-medium hover:underline underline-offset-4 transition-colors duration-300 ${
-                        isDarkMode ? 'text-white' : 'text-[#1a1b1e]'
-                    }`}
-                    prefetch={false}>
-                    Solutions
-                </Link>
-                <Link
-                    href="#"
-                    className={`text-sm font-medium hover:underline underline-offset-4 transition-colors duration-300 ${
-                        isDarkMode ? 'text-white' : 'text-[#1a1b1e]'
-                    }`}
-                    prefetch={false}>
-                    News
-                </Link>
+                <NavLink
+                    href="/"
+                    currentPath={pathname}
+                    label="Home"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/rooms"
+                    currentPath={pathname}
+                    label="Rooms"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/spa-services"
+                    currentPath={pathname}
+                    label="Spa Services"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/dining"
+                    currentPath={pathname}
+                    label="Dining"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/activities"
+                    currentPath={pathname}
+                    label="Activities"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/venues"
+                    currentPath={pathname}
+                    label="Venues"
+                    isDarkMode={isDarkMode}
+                />
+                <NavLink
+                    href="/concierge-services"
+                    currentPath={pathname}
+                    label="Concierge Services"
+                    isDarkMode={isDarkMode}
+                />
             </nav>
             <div className="flex items-center gap-4">
                 <Button
@@ -145,7 +156,9 @@ export default function Header() {
                             <AvatarFallback>{getInitials()}</AvatarFallback>
                         </Avatar>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent>
+                    <DropdownMenuContent
+                        className="relative z-50"
+                        style={{ zIndex: 1000 }}>
                         <DropdownMenuItem>My Account</DropdownMenuItem>
                         <DropdownMenuItem>Settings</DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -163,38 +176,81 @@ export default function Header() {
             {isMenuOpen && (
                 <div className="md:hidden absolute top-16 left-0 right-0 bg-white shadow-lg">
                     <nav className="flex flex-col items-start p-4">
-                        <Link
-                            href="#"
-                            className="block w-full py-2 text-sm font-medium text-[#1a1b1e] hover:underline"
-                            prefetch={false}
-                            onClick={() => setIsMenuOpen(false)}>
-                            Home
-                        </Link>
-                        <Link
-                            href="#"
-                            className="block w-full py-2 text-sm font-medium text-[#1a1b1e] hover:underline"
-                            prefetch={false}
-                            onClick={() => setIsMenuOpen(false)}>
-                            About Us
-                        </Link>
-                        <Link
-                            href="#"
-                            className="block w-full py-2 text-sm font-medium text-[#1a1b1e] hover:underline"
-                            prefetch={false}
-                            onClick={() => setIsMenuOpen(false)}>
-                            Solutions
-                        </Link>
-                        <Link
-                            href="#"
-                            className="block w-full py-2 text-sm font-medium text-[#1a1b1e] hover:underline"
-                            prefetch={false}
-                            onClick={() => setIsMenuOpen(false)}>
-                            News
-                        </Link>
+                        <NavLink
+                            href="/"
+                            currentPath={pathname}
+                            label="Home"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/about-us"
+                            currentPath={pathname}
+                            label="Rooms"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/solutions"
+                            currentPath={pathname}
+                            label="Spa Services"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/news"
+                            currentPath={pathname}
+                            label="Dining"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/news"
+                            currentPath={pathname}
+                            label="Activities"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/news"
+                            currentPath={pathname}
+                            label="Venues"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
+                        <NavLink
+                            href="/news"
+                            currentPath={pathname}
+                            label="Concierge Services"
+                            isDarkMode={isDarkMode}
+                            onClick={() => setIsMenuOpen(false)}
+                        />
                     </nav>
                 </div>
             )}
         </header>
+    )
+}
+
+function NavLink({ href, currentPath, label, isDarkMode, onClick }) {
+    const isActive = href === currentPath
+
+    return (
+        <Link
+            href={href}
+            className={`text-sm font-medium hover:underline underline-offset-4 transition-colors duration-300 ${
+                isActive
+                    ? isDarkMode
+                        ? 'text-yellow-500'
+                        : 'text-blue-600'
+                    : isDarkMode
+                    ? 'text-white'
+                    : 'text-[#1a1b1e]'
+            }`}
+            prefetch={false}
+            onClick={onClick}>
+            {label}
+        </Link>
     )
 }
 

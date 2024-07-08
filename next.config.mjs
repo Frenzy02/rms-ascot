@@ -1,4 +1,11 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+    swcMinify: false,
+    webpack: (config, { isServer }) => {
+        config.externals.push('canvas')
 
-export default nextConfig;
+        return config
+    }
+}
+
+export default nextConfig

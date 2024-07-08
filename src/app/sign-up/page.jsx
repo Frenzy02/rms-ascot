@@ -51,13 +51,13 @@ export default function SignUp() {
 
                 notification(
                     'success',
-                    'Registration successful! Please check your email to verify your account.',
-                    {
-                        onClose: () => {
-                            setTimeout(() => router.push('/log-in'), 2000)
-                        }
-                    }
+                    'Registration successful! Please check your email to verify your account.'
                 )
+
+                // Redirect to log-in after a slight delay to allow notification to be seen
+                setTimeout(() => {
+                    router.push('/log-in')
+                }, 2000)
 
                 // Reset the form
                 setUserInfo(defaultFields)
@@ -170,7 +170,7 @@ export default function SignUp() {
                             type="submit"
                             disabled={isLoading}
                             className="relative flex w-full justify-center rounded-md bg-gray-400 py-2 px-4 text-sm font-medium text-primary-foreground text-gray-900 shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-                            {isLoading ? 'Loading...' : 'Register'}
+                            {isLoading ? 'Registering...' : 'Register'}
                         </Button>
                     </form>
                 </div>

@@ -29,12 +29,18 @@ export default function LogIn() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
-                // User is signed in, redirect to dashboard
+                const userData = {
+                    email: user.email,
+                    displayName: user.displayName,
+                    uid: user.uid
+                    // Add other user properties if needed
+                }
+                setAuthUser(userData)
                 router.push('/')
             }
         })
         return () => unsubscribe()
-    }, [router])
+    }, [router, setAuthUser])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -47,13 +53,11 @@ export default function LogIn() {
                 password
             )
             const user = userCredential.user
-            // Handle successful sign-in here
             if (user) {
                 const userData = {
                     email: user.email,
                     displayName: user.displayName,
                     uid: user.uid
-                    // Add other user properties if needed
                 }
                 setAuthUser(userData)
                 router.push('/')
@@ -88,13 +92,11 @@ export default function LogIn() {
         try {
             const result = await signInWithPopup(auth, provider)
             const user = result.user
-            // Handle successful sign-in here
             if (user) {
                 const userData = {
                     email: user.email,
                     displayName: user.displayName,
                     uid: user.uid
-                    // Add other user properties if needed
                 }
                 setAuthUser(userData)
                 router.push('/')
@@ -123,13 +125,11 @@ export default function LogIn() {
         try {
             const result = await signInWithPopup(auth, provider)
             const user = result.user
-            // Handle successful sign-in here
             if (user) {
                 const userData = {
                     email: user.email,
                     displayName: user.displayName,
                     uid: user.uid
-                    // Add other user properties if needed
                 }
                 setAuthUser(userData)
                 router.push('/')
