@@ -9,7 +9,7 @@ export const useAuthUserStore = create(
             clearAuthUser: () => set({ authUser: null })
         }),
         {
-            name: 'iot-auth-user',
+            name: 'auth-user',
             storage: createJSONStorage(() => sessionStorage)
         }
     )

@@ -1,0 +1,129 @@
+@keyframes slideInFromBottom {
+    from {
+        opacity: 0;
+        transform: translateY(20px); /* Start below */
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0); /* End at final position */
+    }
+}
+
+.scroll-animation {
+    opacity: 0; /* Initially hidden */
+    transform: translateY(20px); /* Positioned below */
+    transition: opacity 1s ease-out, transform 1s ease-out; /* Smooth transition with slower timing */
+}
+
+.scroll-animation.visible {
+    opacity: 1;
+    transform: translateY(0); /* Move to final position */
+    animation: slideInFromBottom 1s ease-out; /* Apply slower slide-in animation */
+}
+
+/* Features.css */
+
+/* Features.css */
+
+.features {
+    padding: 40px 20px; /* Reduce padding */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: -20px; /* Negative margin to pull it up if needed */
+}
+
+/* Other styles... */
+
+/* Other styles... */
+
+.features h2 {
+    font-size: 2rem;
+    color: #333; /* Dark grey for the title */
+    margin-bottom: 40px; /* Space below the title */
+}
+
+.features-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center; /* Center the cards */
+    max-width: 1200px; /* Limit the width of the container */
+}
+
+/* Styles for feature cards */
+.feature {
+    border: 1px solid #ddd; /* Light border to separate cards */
+    border-radius: 8px; /* Rounded corners */
+    padding: 20px;
+    margin: 20px;
+    max-width: 300px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for cards */
+    transition: transform 0.3s ease, box-shadow 0.3s ease; /* Smooth transition on hover */
+    text-align: center; /* Center-align content */
+    background: linear-gradient(
+        145deg,
+        #e0f7fa,
+        #b9fbc0
+    ); /* Gradient background */
+    opacity: 0; /* Initially hidden */
+    transform: translateY(20px); /* Positioned below */
+}
+
+/* Individual card gradients */
+.feature:nth-child(1) {
+    background: linear-gradient(
+        145deg,
+        #a2d9ce,
+        #76c7c0
+    ); /* Greenish gradient */
+}
+
+.feature:nth-child(2) {
+    background: linear-gradient(145deg, #f7c6c7, #f4a7a8); /* Pink gradient */
+}
+
+.feature:nth-child(3) {
+    background: linear-gradient(145deg, #c4e1f0, #a2c2e0); /* Blue gradient */
+}
+
+.feature:hover {
+    transform: translateY(-5px); /* Slight lift effect */
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2); /* Enhanced shadow on hover */
+}
+
+.feature h3 {
+    font-size: 1.5rem;
+    color: #333; /* Dark grey color for the feature titles */
+    margin-top: 15px; /* Add space above the title */
+}
+
+.feature p {
+    font-size: 1rem;
+    color: #555; /* Dark grey color for the text */
+}
+
+/* Style for the animated icons */
+.feature-icon {
+    font-size: 3rem; /* Large icon size */
+    color: #004d40; /* Dark teal color for icons */
+    margin-bottom: 10px; /* Space below the icon */
+    animation: popUp 0.5s ease-out; /* Add pop-up animation */
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    .hero,
+    .features,
+    .contact {
+        padding: 40px 10px;
+    }
+
+    .features-container {
+        flex-direction: column;
+    }
+
+    .feature {
+        max-width: 90%;
+        margin-bottom: 20px;
+    }
+}

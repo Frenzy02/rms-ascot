@@ -1,38 +1,25 @@
 'use client'
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useAuthUserStore } from '@/store/user'
-import { useEffect, useState } from 'react'
-import { whiteListedPaths } from '@/constant/whitelist'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 export default function Footer() {
-    const { user, clearAuthUser } = useAuthUserStore((state) => ({
-        user: state.authUser,
-        clearAuthUser: state.clearAuthUser
-    }))
-
     const [isClient, setIsClient] = useState(false)
     const pathname = usePathname()
-    const router = useRouter()
+
+    const whiteListedPaths = ['/admin-panel', '/staff-panel', '/viewer-panel']
+    const hideFooter = whiteListedPaths.includes(pathname)
 
     useEffect(() => {
-        if (!user && !whiteListedPaths.includes(pathname)) {
-            router.push('/log-in')
-        }
         setIsClient(true)
-    }, [pathname, user, router])
+    }, [])
 
-    // If the current path is in the whiteListedPaths, do not render the header
-    if (whiteListedPaths.includes(pathname)) {
-        return null
-    }
-
+    if (!isClient || hideFooter) return null
     return (
         <footer className="bg-muted py-6 px-4 md:px-6">
             <div className="container flex flex-col items-center justify-between gap-4 sm:flex-row">
                 <p className="text-sm text-muted-foreground">
-                    &copy; 2024 Resort Appointment. All rights reserved.
+                    &copy; 2024 ASCOT RMS. All rights reserved.
                 </p>
                 <nav className="flex items-center gap-4">
                     <Link
