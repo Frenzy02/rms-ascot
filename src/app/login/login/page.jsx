@@ -1,10 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useAuthUserStore } from '@/store/user'
 import {
     Card,
     CardContent,
@@ -18,27 +17,10 @@ import { X, Eye, EyeOff } from 'lucide-react'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { cardio } from 'ldrs'
-import { Account, Client } from 'appwrite'
-import {
-    appwriteConfig,
-    getUserData,
-    signInUser,
-    signUpUser
-} from '@/services/api/appwrite'
-
 cardio.register()
 
-// Initialize Appwrite Account
-const account = new Account(
-    new Client()
-        .setEndpoint(appwriteConfig.endpoint)
-        .setProject(appwriteConfig.projectId)
-)
-
 // Main Modal Component
-export default function LogInSignUpModal({ onClose }) {
-    const [showPassword, setShowPassword] = useState(false)
-    const [error, setError] = useState('')
+export default function ModalComponent({ onClose }) {
     const [isFlipped, setIsFlipped] = useState(false)
     const [isOpen, setIsOpen] = useState(true)
     const [formData, setFormData] = useState({
@@ -49,98 +31,90 @@ export default function LogInSignUpModal({ onClose }) {
         email: '',
         password: '',
         confirmPassword: '',
-        role: 'viewer'
+        role: 'instructor'
     })
+    const [error, setError] = useState('')
+    const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
-    const { setAuthUser } = useAuthUserStore((state) => ({
-        setAuthUser: state.setAuthUser
-    }))
 
-    useEffect(() => {
-        // Check Appwrite session and get user data if logged in
-        const checkAuthState = async () => {
-            try {
-                const user = await account.get() // Get the current authenticated user
-                if (user) {
-                    const userData = await getUserData(user.$id)
-                    setAuthUser(userData)
-
-                    // Redirect based on user role
-                    if (userData) {
-                        redirectUser(userData.role)
-                    }
-                }
-            } catch (error) {
-                console.error('Error checking auth state:', error)
-            }
-        }
-
-        checkAuthState()
-    }, [router, setAuthUser])
-
+    // Handle input change for the form fields
     const handleInputChange = (e) => {
         const { name, value } = e.target
         setFormData((prev) => ({ ...prev, [name]: value }))
     }
 
+    // Handle sign up form submission
     const handleSignup = async (e) => {
         e.preventDefault()
-        if (formData.password !== formData.confirmPassword) {
-            toast.error('Passwords do not match.')
-            return
-        }
         setLoading(true)
-        const response = await signUpUser(formData)
-        setLoading(false)
 
-        if (response.success) {
-            toast.success('Registration successful!')
-            setAuthUser(response.user)
+        try {
+            const response = await fetch('/api/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password,
+                    firstname: formData.firstname,
+                    lastname: formData.lastname,
+                    gender: formData.gender,
+                    username: formData.username // Add username
+                })
+            })
 
-            // Redirect based on role
-            redirectUser(response.user.role)
-        } else {
-            toast.error(response.error)
+            const data = await response.json()
+            if (!response.ok) throw new Error(data.message)
+            toast.success(data.message)
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(false)
         }
     }
 
     const handleLogin = async (e) => {
         e.preventDefault()
         setLoading(true)
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password
+                })
+            })
 
-        const response = await signInUser(formData.email, formData.password)
-        setLoading(false)
+            const data = await response.json()
+            if (!data.success) throw new Error(data.message || 'Login failed')
 
-        if (response.success) {
-            toast.success('You have successfully logged in.')
-            setAuthUser(response.user)
+            sessionStorage.setItem('isLoggedIn', 'true')
+            sessionStorage.setItem('username', data.username)
+            sessionStorage.setItem('email', formData.email)
+            sessionStorage.setItem('userId', data.userId)
 
-            // Redirect based on user role
-            redirectUser(response.user.role)
-        } else {
-            toast.error(response.error)
-        }
-    }
-
-    const redirectUser = (role) => {
-        if (role === 'admin') {
-            router.push('/admin-panel')
-        } else if (role === 'staff') {
-            router.push('/staff-panel')
-        } else if (role === 'viewer') {
-            router.push('/viewer-panel')
-        } else {
-            router.push('/')
+            toast.success('You have successfully logged in!')
+            router.push('/student-panel')
+        } catch (error) {
+            setError(error.message)
+        } finally {
+            setLoading(false)
         }
     }
 
     const handleFlip = () => {
         setIsFlipped((prev) => !prev)
+        setError('')
     }
 
     const closeModal = () => {
         setIsOpen(false)
+        onClose()
     }
 
     if (!isOpen) return null

@@ -1,0 +1,9 @@
+
+username: itchandev
+password: 4by4615nSso0rWl7
+
+
+mongodb+srv://itchandev:4by4615nSso0rWl7@ascot-rms.v3pcp.mongodb.net/
+
+
+mongosh "mongodb+srv://itchandev:<password>@clinic-app.jurln.mongodb.net/test" --apiVersion 1

@@ -1,0 +1,203 @@
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7); /* Slightly darker background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000; /* Ensure it appears above all other content */
+}
+
+/* Modal Content */
+.modal-content {
+    background-color: transparent; /* Transparent background */
+    border: none; /* No border for the modal content */
+    padding: 20px; /* Add padding for better spacing */
+    position: relative;
+    width: 100%;
+    max-width: 90vw;
+    max-height: 90vh;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Add shadow for better visibility */
+}
+
+/* Login Signup Container */
+.login-signup-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    background-color: transparent; /* Transparent background */
+}
+
+/* Card Wrapper */
+.card-wrapper {
+    width: 100%;
+    max-width: 360px; /* Adjust if needed */
+    height: 500px; /* Adjust if needed */
+    perspective: 1000px;
+    position: relative;
+}
+
+/* Card Styles */
+.card {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.8s ease-in-out;
+    border-radius: 10px; /* Rounded corners for card */
+    border: 2px solid #fff; /* Border around the card */
+    background: #2b2e38; /* Background color for the card */
+}
+
+.card.sign-up {
+    transform: rotateY(180deg);
+}
+
+.card-front,
+.card-back {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    backface-visibility: hidden;
+    border-radius: 10px; /* Rounded corners for card faces */
+    overflow: hidden;
+}
+
+.card-front {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transform: rotateY(0deg);
+}
+
+.card-back {
+    transform: rotateY(180deg);
+}
+
+/* Close Button */
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    color: #fff;
+    cursor: pointer;
+    z-index: 10001; /* Ensure it's above card content */
+}
+
+.close-button:hover {
+    color: #ffeba7;
+}
+
+/* Form Container */
+.form-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+.form-style {
+    width: 100%;
+    padding: 12px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    background: #1f2029;
+    color: #c4c3ca;
+    box-sizing: border-box;
+}
+
+.btn {
+    background-color: #ffeba7;
+    color: #000;
+    border: none;
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.btn:hover {
+    background-color: #000;
+    color: #ffeba7;
+}
+
+.link {
+    color: #ffeba7;
+    cursor: pointer;
+    margin-top: 10px;
+    text-align: center;
+}
+
+.link:hover {
+    color: #c4c3ca;
+}
+h4 {
+    color: #ffeba7; /* Visible color for headings */
+    margin-bottom: 20px;
+}
+
+/* Error Message */
+.error {
+    color: #ff4d4d; /* Error color */
+    margin-top: 10px;
+}
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .card-wrapper {
+        height: 70vh; /* Adjust height for smaller screens */
+        max-width: 90vw; /* Ensure it fits within the viewport */
+        padding: 10px;
+    }
+
+    .form-style {
+        padding: 8px; /* Adjust padding for input fields */
+    }
+
+    .btn {
+        padding: 8px; /* Adjust padding for buttons */
+    }
+
+    .link {
+        font-size: 14px; /* Adjust font size for links */
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-content {
+        max-width: 95vw;
+        max-height: 85vh;
+    }
+
+    .form-style {
+        padding: 10px;
+        font-size: 14px; /* Adjust for readability on smaller screens */
+    }
+
+    .btn {
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    .link {
+        font-size: 12px;
+        margin-top: 15px;
+    }
+}

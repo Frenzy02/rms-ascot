@@ -1,5 +1,4 @@
 'use client'
-
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,9 +14,19 @@ import { File, Folder, Search, LogOut, Smartphone } from 'lucide-react'
 import QRCode from 'qrcode.react'
 import { toast, ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
-import { useAuthUserStore } from '@/store/user' // Import your Zustand store
+import { useAuthUserStore } from '@/store/user'
 import { useRouter } from 'next/navigation'
-import { auth } from '@/services/api/firebase'
+
+// Import Appwrite modules
+import { Client, Account, Databases, Storage, Query } from 'appwrite'
+import { appwriteConfig, signOut } from '@/services/api/appwrite'
+
+// Initialize Appwrite Client
+const client = new Client()
+client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
+const account = new Account(client)
+const databases = new Databases(client)
+const storage = new Storage(client)
 
 // Mock file system data
 const fileSystem = [
@@ -83,15 +92,20 @@ export default function Component() {
     const [qrValue, setQRValue] = useState('')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const router = useRouter()
-    const clearAuthUser = useAuthUserStore((state) => state.clearAuthUser) // Use Zustand store to clear auth user
+    const clearAuthUser = useAuthUserStore((state) => state.clearAuthUser)
 
     useEffect(() => {
         const checkLogin = async () => {
-            const user = auth.currentUser
-            if (user) {
-                setIsLoggedIn(true)
-            } else {
-                router.push('/') // Redirect to login if not authenticated
+            try {
+                const user = await account.get() // Check for current Appwrite session
+                if (user) {
+                    setIsLoggedIn(true)
+                } else {
+                    router.push('/') // Redirect to login if not authenticated
+                }
+            } catch (error) {
+                console.error('Error checking auth state:', error)
+                router.push('/')
             }
         }
 
@@ -131,19 +145,17 @@ export default function Component() {
     }
 
     const handleLogoutClick = () => {
-        console.log('Logout button clicked') // Debugging line
         setIsDialogOpen(true)
     }
 
     const handleLogoutConfirm = async () => {
-        try {
-            await auth.signOut()
-            clearAuthUser() // Ensure this is defined correctly
-            router.push('/')
-            toast.success('Successfully signed out.')
-        } catch (error) {
-            console.error('Sign out error:', error) // Log error to console
-            toast.error('Error signing out. Please try again.') // Toast error message
+        const response = await signOut() // Use the logout function
+        if (response.success) {
+            clearAuthUser() // Clear user data in your local store
+            router.push('/') // Redirect to the login page
+            toast.success(response.message)
+        } else {
+            toast.error(response.error)
         }
     }
 
