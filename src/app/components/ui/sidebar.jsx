@@ -77,7 +77,7 @@ export const DesktopSidebar = ({ className, children, ...props }) => {
             <div className="flex items-center justify-center h-16 bg-neutral-800 dark:bg-neutral-800">
                 <div className="flex items-center space-x-2">
                     <img
-                        src="/logo.svg"
+                        src="/ascot.png"
                         alt="ASCOT Clinic Logo"
                         className="h-8 w-8"
                     />

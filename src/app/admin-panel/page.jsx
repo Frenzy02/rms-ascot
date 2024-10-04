@@ -27,13 +27,17 @@ import {
     AlertDialogHeader,
     AlertDialogTitle
 } from '@/components/ui/alert-dialog'
-import { getUserData } from '@/services/api/user-management'
-import { auth } from '@/services/api/firebase'
+import { Client, Account } from 'appwrite'
+import { appwriteConfig, signOut } from '@/services/api/appwrite'
 import { ToastContainer, toast } from 'react-toastify'
 
+// Initialize Appwrite Client
+const client = new Client()
+client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
+const account = new Account(client)
+
 const AdminPanel = () => {
-    const { user, clearAuthUser } = useAuthUserStore((state) => ({
-        user: state.authUser,
+    const { clearAuthUser } = useAuthUserStore((state) => ({
         clearAuthUser: state.clearAuthUser
     }))
     const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -44,16 +48,16 @@ const AdminPanel = () => {
 
     useEffect(() => {
         const checkLogin = async () => {
-            const user = auth.currentUser // Check if user is currently authenticated
-            if (user) {
-                const userData = await getUserData(user.uid)
-                if (userData) {
+            try {
+                const user = await account.get() // Check for current Appwrite session
+                if (user) {
                     setIsLoggedIn(true) // User is logged in
                 } else {
-                    router.push('/') // Redirect if user data is not found
+                    router.push('/') // Redirect if no user is found
                 }
-            } else {
-                router.push('/') // Redirect to login if no user is found
+            } catch (error) {
+                console.error('Error checking auth state:', error)
+                router.push('/') // Redirect to login if an error occurs
             }
         }
 
@@ -65,13 +69,13 @@ const AdminPanel = () => {
     }
 
     const handleLogoutConfirm = async () => {
-        try {
-            await auth.signOut()
-            clearAuthUser()
-            router.push('/')
-            toast.success('Successfully signed out.')
-        } catch (error) {
-            toast.error('Error signing out. Please try again.')
+        const response = await signOut() // Use the logout function
+        if (response.success) {
+            clearAuthUser() // Clear user data in your local store
+            router.push('/') // Redirect to the login page
+            toast.success(response.message)
+        } else {
+            toast.error(response.error)
         }
     }
 
@@ -183,6 +187,8 @@ const AdminPanel = () => {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <ToastContainer />
         </div>
     )
 }
