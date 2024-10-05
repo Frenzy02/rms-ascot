@@ -1,32 +1,39 @@
-import { Client, Account, Databases, Storage, Query } from 'appwrite'
+import {
+    Client,
+    Account,
+    Databases,
+    Storage,
+    Query,
+    ID,
+    Permission,
+    Role
+} from 'appwrite'
 
 export const appwriteConfig = {
     endpoint: 'https://cloud.appwrite.io/v1',
     projectId: '66fbb1c3002b793d9e26',
-    storageId: '66fd06700033326ede52',
+    storageId: '67009d7a001d832768e4',
     databaseId: '66fd06eb0016cdc0dafd',
     userCollectionId: '66fd09a00027f5737fa0',
-    uploadsCollectionId: 'uploads'
+    uploadsCollectionId: '67009c84000c8738130e',
+    subfoldersCollectionId: '67009c300034ee85834f'
 }
 
 const client = new Client()
-
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
 
 const account = new Account(client)
 const storage = new Storage(client)
 const databases = new Databases(client)
 
+// User signup
 export const signUpUser = async (formData) => {
     try {
-        // Create a new user with email and password
         const user = await account.create(
-            'unique()',
+            ID.unique(),
             formData.email,
             formData.password
         )
-
-        // Save user data to Appwrite Database with user ID
         const userDoc = {
             username: formData.username,
             firstname: formData.firstname,
@@ -36,7 +43,6 @@ export const signUpUser = async (formData) => {
             role: formData.role
         }
 
-        // Store user data in Appwrite database
         await databases.createDocument(
             appwriteConfig.databaseId,
             appwriteConfig.userCollectionId,
@@ -54,6 +60,7 @@ export const signUpUser = async (formData) => {
             }
         }
     } catch (error) {
+        console.error('Error during sign-up:', error)
         return {
             success: false,
             error: error.message.includes('password')
@@ -63,15 +70,13 @@ export const signUpUser = async (formData) => {
     }
 }
 
+// User sign-in
 export const signInUser = async (email, password) => {
     try {
-        // Log in user with email and password
         const session = await account.createEmailPasswordSession(
             email,
             password
         )
-
-        // Fetch user data from Appwrite Database
         const userData = await getUserData(session.userId)
 
         if (!userData) {
@@ -83,11 +88,11 @@ export const signInUser = async (email, password) => {
             user: {
                 email: email,
                 uid: session.userId,
-                role: userData.role // Get role from userData
+                role: userData.role
             }
         }
     } catch (error) {
-        console.error('SignIn Error: ', error) // Log the error for debugging
+        console.error('SignIn Error: ', error)
         return {
             success: false,
             error: error.message || 'An error occurred during sign-in.'
@@ -95,6 +100,7 @@ export const signInUser = async (email, password) => {
     }
 }
 
+// Get user data
 export const getUserData = async (uid) => {
     try {
         const userDoc = await databases.getDocument(
@@ -109,6 +115,7 @@ export const getUserData = async (uid) => {
     }
 }
 
+// Fetch all users
 export const fetchUsers = async () => {
     try {
         const snapshot = await databases.listDocuments(
@@ -134,32 +141,30 @@ export const fetchUsers = async () => {
     }
 }
 
-export const uploadFile = async (file, metadata) => {
+// Upload a file
+export const uploadFile = async (file, metadata, folderId) => {
     try {
-        // Upload the file to Appwrite Storage
         const storageResponse = await storage.createFile(
             appwriteConfig.storageId,
-            'unique()',
+            ID.unique(),
             file
         )
 
-        // Get the file URL
         const fileUrl = storage.getFileView(
             appwriteConfig.storageId,
             storageResponse.$id
         )
-
-        // Store metadata in Appwrite Database
         const data = {
             ...metadata,
             fileUrl,
+            folderId, // Associate file with the folder
             dateOfUpload: new Date().toISOString()
         }
 
         await databases.createDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsCollectionId,
-            'unique()',
+            ID.unique(),
             data
         )
 
@@ -170,6 +175,112 @@ export const uploadFile = async (file, metadata) => {
     }
 }
 
+// Create a folder in the database
+export const createFolder = async (folderName, parentFolderId = null) => {
+    try {
+        const folderData = {
+            name: folderName,
+            type: 'folder',
+            parentId: parentFolderId || '', // Use empty string for root folder
+            createdAt: new Date().toISOString()
+        }
+
+        const permissions = [
+            Permission.read(Role.users()),
+            Permission.update(Role.users()),
+            Permission.delete(Role.users()),
+            Permission.write(Role.users())
+        ]
+
+        let folderResponse
+
+        if (parentFolderId) {
+            // Create a subfolder in the subfolder collection
+            folderResponse = await databases.createDocument(
+                appwriteConfig.databaseId,
+                appwriteConfig.subfoldersCollectionId, // Subfolder collection ID
+                ID.unique(),
+                folderData,
+                permissions
+            )
+        } else {
+            // Create a root folder in the uploads collection
+            folderResponse = await databases.createDocument(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsCollectionId, // Main uploads collection ID
+                ID.unique(),
+                folderData,
+                permissions
+            )
+        }
+
+        return folderResponse
+    } catch (error) {
+        console.error('Error creating folder:', error)
+        throw new Error('Failed to create folder.')
+    }
+}
+
+// Helper function to build a nested folder structure
+const buildFolderTree = (folders) => {
+    const folderMap = {}
+
+    folders.forEach((folder) => {
+        folder.subfolders = []
+        folderMap[folder.$id] = folder
+    })
+
+    const rootFolders = []
+
+    folders.forEach((folder) => {
+        if (folder.parentId) {
+            if (folderMap[folder.parentId]) {
+                folderMap[folder.parentId].subfolders.push(folder)
+            }
+        } else {
+            rootFolders.push(folder)
+        }
+    })
+
+    return rootFolders
+}
+
+// Fetch folders and files
+// Fetch folders and files
+export const fetchFoldersAndFiles = async (parentFolderId = null) => {
+    try {
+        let foldersResponse
+
+        if (parentFolderId) {
+            // Fetch subfolders from the subfolders collection
+            foldersResponse = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.subfoldersCollectionId,
+                [Query.equal('parentId', parentFolderId)]
+            )
+        } else {
+            // Fetch root folders from the uploads collection
+            foldersResponse = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsCollectionId,
+                [Query.equal('type', 'folder'), Query.equal('parentId', '')]
+            )
+        }
+
+        return {
+            folders: foldersResponse.documents.map((doc) => ({
+                ...doc,
+                subfolders: [] // Initialize subfolders
+            })),
+            files: [] // Implement file fetching if needed
+        }
+    } catch (error) {
+        console.error('Error fetching folders and files:', error)
+        throw new Error('Failed to fetch data.')
+    }
+}
+
+// Fetch records
 export const fetchRecords = async () => {
     try {
         const snapshot = await databases.listDocuments(
@@ -186,6 +297,7 @@ export const fetchRecords = async () => {
     }
 }
 
+// Fetch user files
 export const fetchUserFiles = async (userId) => {
     try {
         const snapshot = await databases.listDocuments(
@@ -204,23 +316,22 @@ export const fetchUserFiles = async (userId) => {
     }
 }
 
-// Sign Out
+// Sign out
 export async function signOut() {
     try {
-        await account.deleteSession('current') // Attempt to delete the current session
+        await account.deleteSession('current')
         return {
             success: true,
             message: 'Successfully logged out.'
         }
     } catch (error) {
         console.error('Error signing out:', error.message)
-        // Check if the error is due to the user not being logged in
         if (
             error.message.includes('missing scope') ||
             error.message.includes('Invalid session')
         ) {
             return {
-                success: true, // Treat this as a successful logout
+                success: true,
                 message: 'No active session found. Considered logged out.'
             }
         }

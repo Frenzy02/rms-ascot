@@ -1,7 +1,5 @@
-// src/components/DocumentsTab.js
-import React, { useState } from 'react'
-import { Search, Plus, Grid, List, Filter, Trash2, Upload } from 'lucide-react'
-
+import React, { useState, useEffect } from 'react'
+import { Plus, Grid, List, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -12,68 +10,20 @@ import {
     SelectValue
 } from '@/components/ui/select'
 
-// Import separated components
 import CardView from './components/CardView'
 import ListView from './components/ListView'
 import FileItem from './components/FileItem'
-
-// Mock data for folders and files with nested structure
-const initialFolders = [
-    {
-        id: 1,
-        name: 'Reports',
-        color: 'bg-blue-500',
-        icon: '📊',
-        subfolders: [],
-        files: []
-    },
-    {
-        id: 2,
-        name: 'Financials',
-        color: 'bg-green-500',
-        icon: '💰',
-        subfolders: [],
-        files: []
-    },
-    {
-        id: 3,
-        name: 'Projects',
-        color: 'bg-purple-500',
-        icon: '🏗️',
-        subfolders: [],
-        files: []
-    },
-    {
-        id: 4,
-        name: 'HR Documents',
-        color: 'bg-yellow-500',
-        icon: '👥',
-        subfolders: [],
-        files: []
-    },
-    {
-        id: 5,
-        name: 'Marketing',
-        color: 'bg-red-500',
-        icon: '📣',
-        subfolders: [],
-        files: []
-    },
-    {
-        id: 6,
-        name: 'Legal',
-        color: 'bg-indigo-500',
-        icon: '⚖️',
-        subfolders: [],
-        files: []
-    }
-]
+import {
+    createFolder,
+    fetchFoldersAndFiles,
+    uploadFile
+} from '@/services/api/appwrite'
 
 export default function DocumentsTab() {
     const [view, setView] = useState('card')
     const [searchTerm, setSearchTerm] = useState('')
     const [sortBy, setSortBy] = useState('name')
-    const [folders, setFolders] = useState(initialFolders)
+    const [folders, setFolders] = useState([])
     const [selectedFolder, setSelectedFolder] = useState(null)
     const [showAddFolderModal, setShowAddFolderModal] = useState(false)
     const [showAddFileModal, setShowAddFileModal] = useState(false)
@@ -82,78 +32,159 @@ export default function DocumentsTab() {
     const [newFolderName, setNewFolderName] = useState('')
     const [newFileName, setNewFileName] = useState('')
     const [newFileType, setNewFileType] = useState('PDF')
-    const [newFileTitle, setNewFileTitle] = useState('') // Define newFileTitle state
-    const [newFileDescription, setNewFileDescription] = useState('') // Define newFileDescription state
-    const [newFileHandleBy, setNewFileHandleBy] = useState('') // Define newFileHandleBy state
-    const [uploadedFile, setUploadedFile] = useState(null) // Define uploadedFile state
+    const [newFileTitle, setNewFileTitle] = useState('')
+    const [newFileDescription, setNewFileDescription] = useState('')
+    const [newFileHandleBy, setNewFileHandleBy] = useState('')
+    const [uploadedFile, setUploadedFile] = useState(null)
 
-    // Search and Filter
     const filteredFolders = folders.filter((folder) =>
         folder.name.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
-    // Find the folder in the folder structure recursively
-    const findFolderById = (folderId, currentFolders) => {
-        for (let folder of currentFolders) {
-            if (folder.id === folderId) {
-                return folder
-            }
-            const foundInSubfolder = findFolderById(folderId, folder.subfolders)
-            if (foundInSubfolder) {
-                return foundInSubfolder
-            }
+    useEffect(() => {
+        fetchInitialFolders()
+    }, [])
+
+    // Fetch folders and files from Appwrite
+    const fetchInitialFolders = async () => {
+        try {
+            const { folders } = await fetchFoldersAndFiles(null)
+            const nestedFolders = buildNestedFolderStructure(folders)
+            setFolders(nestedFolders || [])
+        } catch (error) {
+            console.error('Error fetching folders:', error)
         }
-        return null
+    }
+
+    // Fetch subfolders when selecting a folder
+    const selectFolder = async (folder) => {
+        setSelectedFolder(folder)
+        try {
+            const { folders: subfolders } = await fetchFoldersAndFiles(
+                folder.$id
+            )
+            const updatedFolders = [...folders]
+            const parentFolder = findFolderById(folder.$id, updatedFolders)
+            if (parentFolder) {
+                parentFolder.subfolders = subfolders
+            }
+            setFolders(updatedFolders)
+        } catch (error) {
+            console.error('Error fetching subfolders:', error)
+        }
+    }
+
+    // Helper function to build nested folder structure
+    const buildNestedFolderStructure = (folders) => {
+        const folderMap = {}
+        const rootFolders = []
+
+        // Initialize folder map
+        folders.forEach((folder) => {
+            folderMap[folder.$id] = { ...folder, subfolders: [], files: [] }
+        })
+
+        // Populate subfolders
+        folders.forEach((folder) => {
+            if (folder.parentId) {
+                if (folderMap[folder.parentId]) {
+                    folderMap[folder.parentId].subfolders.push(
+                        folderMap[folder.$id]
+                    )
+                }
+            } else {
+                rootFolders.push(folderMap[folder.$id])
+            }
+        })
+
+        return rootFolders
     }
 
     // Add Folder Handler
-    const handleAddFolder = () => {
-        const newFolder = {
-            id: Date.now(),
-            name: newFolderName,
-            color: 'bg-gray-500',
-            icon: '📁',
-            subfolders: [],
-            files: []
+    const handleAddFolder = async () => {
+        if (!newFolderName.trim()) {
+            alert('Please enter a valid folder name.')
+            return
         }
-        if (selectedFolder) {
-            const updatedFolders = [...folders]
-            const parentFolder = findFolderById(
-                selectedFolder.id,
-                updatedFolders
+
+        try {
+            const folder = await createFolder(
+                newFolderName,
+                selectedFolder ? selectedFolder.$id : null
             )
-            parentFolder.subfolders.push(newFolder)
-            setFolders(updatedFolders)
-        } else {
-            setFolders([...folders, newFolder])
+
+            if (selectedFolder) {
+                const updatedFolders = [...folders]
+                const parentFolder = findFolderById(
+                    selectedFolder.$id,
+                    updatedFolders
+                )
+                if (parentFolder) {
+                    parentFolder.subfolders = parentFolder.subfolders || []
+                    parentFolder.subfolders.push({ ...folder, subfolders: [] })
+                }
+                setFolders(updatedFolders)
+            } else {
+                setFolders([...folders, { ...folder, subfolders: [] }])
+            }
+
+            setShowAddFolderModal(false)
+            setNewFolderName('')
+        } catch (error) {
+            console.error('Error creating folder:', error)
         }
-        setShowAddFolderModal(false)
-        setNewFolderName('')
     }
 
     // Add File Handler
-    const handleAddFile = () => {
-        const newFile = {
-            id: Date.now(),
+    const handleAddFile = async () => {
+        if (!uploadedFile || !selectedFolder) {
+            alert('Please select a file and folder.')
+            return
+        }
+
+        const metadata = {
             name: newFileName,
             title: newFileTitle,
             description: newFileDescription,
             handleBy: newFileHandleBy,
-            type: newFileType,
-            size: '1 MB',
-            date: new Date().toISOString().split('T')[0]
+            type: newFileType
         }
-        if (selectedFolder) {
-            const updatedFolders = [...folders]
-            const parentFolder = findFolderById(
-                selectedFolder.id,
-                updatedFolders
+
+        try {
+            const response = await uploadFile(
+                uploadedFile,
+                metadata,
+                selectedFolder.$id
             )
-            parentFolder.files.push(newFile)
-            setFolders(updatedFolders)
+            if (response.success) {
+                const updatedFolders = [...folders]
+                const parentFolder = findFolderById(
+                    selectedFolder.$id,
+                    updatedFolders
+                )
+                if (parentFolder) {
+                    parentFolder.files = parentFolder.files || []
+                    parentFolder.files.push({
+                        id: Date.now(),
+                        name: newFileName,
+                        title: newFileTitle,
+                        description: newFileDescription,
+                        handleBy: newFileHandleBy,
+                        type: newFileType,
+                        fileUrl: response.fileUrl,
+                        size: uploadedFile.size,
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                }
+                setFolders(updatedFolders)
+                resetFileForm()
+                setShowAddFileModal(false)
+            } else {
+                alert('Failed to upload file.')
+            }
+        } catch (error) {
+            console.error('Error uploading file:', error)
         }
-        setShowAddFileModal(false)
-        resetFileForm()
     }
 
     const resetFileForm = () => {
@@ -169,49 +200,67 @@ export default function DocumentsTab() {
         setUploadedFile(event.target.files[0])
     }
 
+    // Find the folder in the folder structure recursively
+    const findFolderById = (folderId, currentFolders) => {
+        if (!Array.isArray(currentFolders)) return null
+
+        for (let folder of currentFolders) {
+            if (folder.$id === folderId) {
+                return folder
+            }
+            const foundInSubfolder = findFolderById(folderId, folder.subfolders)
+            if (foundInSubfolder) {
+                return foundInSubfolder
+            }
+        }
+        return null
+    }
+
+    // Clear subfolders when navigating back to the root
+    const handleBackToFolders = () => {
+        setSelectedFolder(null)
+        fetchInitialFolders() // Refresh to show only root folders
+    }
+
     // Delete Folder Handler
     const handleDeleteFolder = (folderId, currentFolders) => {
+        if (!Array.isArray(currentFolders)) return []
+
         return currentFolders.filter((folder) => {
-            if (folder.id === folderId) {
-                return false // Remove the folder
+            if (folder.$id === folderId) {
+                return false
             }
             folder.subfolders = handleDeleteFolder(folderId, folder.subfolders)
             return true
         })
     }
 
-    // Open Delete Confirmation Modal
     const openDeleteConfirm = (folder) => {
         setFolderToDelete(folder)
         setShowDeleteConfirmModal(true)
     }
 
-    // Confirm Delete Folder
     const confirmDeleteFolder = () => {
         if (folderToDelete) {
-            setFolders(handleDeleteFolder(folderToDelete.id, folders))
+            setFolders(handleDeleteFolder(folderToDelete.$id, folders))
             setFolderToDelete(null)
             setShowDeleteConfirmModal(false)
             setSelectedFolder(null)
         }
     }
 
-    // Cancel Delete Folder
     const cancelDeleteFolder = () => {
         setFolderToDelete(null)
         setShowDeleteConfirmModal(false)
     }
 
-    // Select folder to view its contents
-    const selectFolder = (folder) => {
-        setSelectedFolder(folder)
-    }
-
     // Recursive folder rendering
     const renderFolders = (currentFolders) => {
+        if (!Array.isArray(currentFolders)) return null
+
         return currentFolders.map((folder) => (
             <div
-                key={folder.id}
+                key={folder.$id}
                 className="relative group cursor-pointer"
                 onClick={() => selectFolder(folder)}>
                 {view === 'card' ? (
@@ -219,14 +268,19 @@ export default function DocumentsTab() {
                 ) : (
                     <ListView folder={folder} />
                 )}
-                {/* Delete icon on hover */}
                 <Trash2
                     className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 cursor-pointer"
                     onClick={(e) => {
-                        e.stopPropagation() // Prevent selecting the folder
+                        e.stopPropagation()
                         openDeleteConfirm(folder)
                     }}
                 />
+                {/* Render subfolders recursively */}
+                {folder.subfolders && (
+                    <div className="pl-4 mt-2">
+                        {renderFolders(folder.subfolders)}
+                    </div>
+                )}
             </div>
         ))
     }
@@ -287,6 +341,50 @@ export default function DocumentsTab() {
                         </SelectContent>
                     </Select>
                 </div>
+
+                {/* Folder and File Display */}
+                {selectedFolder ? (
+                    <div>
+                        <Button onClick={handleBackToFolders} className="mb-4">
+                            Back to Folders
+                        </Button>
+                        <h2 className="text-2xl font-semibold mb-4">
+                            {selectedFolder.name}
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {renderFolders(selectedFolder.subfolders || [])}
+                            {(selectedFolder.files || []).map((file) => (
+                                <FileItem
+                                    key={file.id}
+                                    file={file}
+                                    onView={() =>
+                                        console.log(`Viewing ${file.name}`)
+                                    }
+                                    onEdit={() =>
+                                        console.log(`Editing ${file.name}`)
+                                    }
+                                    onGenerateQR={() =>
+                                        console.log(
+                                            `Generating QR for ${file.name}`
+                                        )
+                                    }
+                                    onDelete={() =>
+                                        console.log(`Deleting ${file.name}`)
+                                    }
+                                />
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div
+                        className={`grid ${
+                            view === 'card'
+                                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                                : 'grid-cols-1'
+                        } gap-6`}>
+                        {renderFolders(folders)}
+                    </div>
+                )}
 
                 {/* Add Folder Modal */}
                 {showAddFolderModal && (
@@ -396,75 +494,29 @@ export default function DocumentsTab() {
                     </div>
                 )}
 
-                {/* Folder and File Display */}
-                {selectedFolder ? (
-                    <div>
-                        <Button
-                            onClick={() => setSelectedFolder(null)}
-                            className="mb-4">
-                            Back to Folders
-                        </Button>
-                        <h2 className="text-2xl font-semibold mb-4">
-                            {selectedFolder.name}
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {renderFolders(selectedFolder.subfolders)}
-                            {selectedFolder.files.map((file) => (
-                                <FileItem
-                                    key={file.id}
-                                    file={file}
-                                    onView={() =>
-                                        console.log(`Viewing ${file.name}`)
-                                    }
-                                    onEdit={() =>
-                                        console.log(`Editing ${file.name}`)
-                                    }
-                                    onGenerateQR={() =>
-                                        console.log(
-                                            `Generating QR for ${file.name}`
-                                        )
-                                    }
-                                    onDelete={() =>
-                                        console.log(`Deleting ${file.name}`)
-                                    }
-                                />
-                            ))}
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirmModal && (
+                    <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center">
+                        <div className="bg-white p-6 rounded shadow-md">
+                            <h2 className="text-xl mb-4">Confirm Delete</h2>
+                            <p>
+                                Are you sure you want to delete the folder "
+                                {folderToDelete?.name}"?
+                            </p>
+                            <Button
+                                onClick={confirmDeleteFolder}
+                                className="bg-red-500 text-white mt-4">
+                                Delete
+                            </Button>
+                            <Button
+                                onClick={cancelDeleteFolder}
+                                className="ml-4 mt-4">
+                                Cancel
+                            </Button>
                         </div>
-                    </div>
-                ) : (
-                    <div
-                        className={`grid ${
-                            view === 'card'
-                                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                                : 'grid-cols-1'
-                        } gap-6`}>
-                        {renderFolders(filteredFolders)}
                     </div>
                 )}
             </div>
-
-            {/* Delete Confirmation Modal */}
-            {showDeleteConfirmModal && (
-                <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center">
-                    <div className="bg-white p-6 rounded shadow-md">
-                        <h2 className="text-xl mb-4">Confirm Delete</h2>
-                        <p>
-                            Are you sure you want to delete the folder "
-                            {folderToDelete?.name}"?
-                        </p>
-                        <Button
-                            onClick={confirmDeleteFolder}
-                            className="bg-red-500 text-white mt-4">
-                            Delete
-                        </Button>
-                        <Button
-                            onClick={cancelDeleteFolder}
-                            className="ml-4 mt-4">
-                            Cancel
-                        </Button>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
