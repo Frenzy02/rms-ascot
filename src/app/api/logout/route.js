@@ -1,4 +1,3 @@
-import { auth } from '../../lib/firebase' // Import your Firebase auth instance
 import { getAuth } from 'firebase/auth'
 
 // Named export for the POST method

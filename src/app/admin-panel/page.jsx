@@ -14,7 +14,7 @@ import {
 import { useAuthUserStore } from '@/store/user'
 import Dashboard from '../admin-panel/dashboard/page'
 import DocumentsRecords from '../admin-panel/documents-records/page'
-import MedicalRequest from '../admin-panel/medical-request/page'
+import DocumentRequest from './document-request/page'
 import Users from '../admin-panel/users/page'
 import Analytics from '../admin-panel/analytics/page'
 import {
@@ -49,15 +49,15 @@ const AdminPanel = () => {
     useEffect(() => {
         const checkLogin = async () => {
             try {
-                const user = await account.get() // Check for current Appwrite session
+                const user = await account.get()
                 if (user) {
-                    setIsLoggedIn(true) // User is logged in
+                    setIsLoggedIn(true)
                 } else {
-                    router.push('/') // Redirect if no user is found
+                    router.push('/')
                 }
             } catch (error) {
                 console.error('Error checking auth state:', error)
-                router.push('/') // Redirect to login if an error occurs
+                router.push('/')
             }
         }
 
@@ -69,14 +69,15 @@ const AdminPanel = () => {
     }
 
     const handleLogoutConfirm = async () => {
-        const response = await signOut() // Use the logout function
+        const response = await signOut()
         if (response.success) {
-            clearAuthUser() // Clear user data in your local store
-            router.push('/') // Redirect to the login page
+            clearAuthUser()
+            router.push('/')
             toast.success(response.message)
         } else {
             toast.error(response.error)
         }
+        setIsDialogOpen(false)
     }
 
     const handleLogoutCancel = () => {
@@ -89,8 +90,8 @@ const AdminPanel = () => {
                 return <Dashboard />
             case 'documentsRecords':
                 return <DocumentsRecords />
-            case 'medicalRequest':
-                return <MedicalRequest />
+            case 'documentRequest':
+                return <DocumentRequest />
             case 'users':
                 return <Users />
             case 'analytics':
@@ -130,7 +131,7 @@ const AdminPanel = () => {
                             label: 'Document Request',
                             icon: <IconMedicalCross />
                         }}
-                        onClick={() => setActiveComponent('medicalRequest')}
+                        onClick={() => setActiveComponent('documentRequest')}
                     />
                     <SidebarLink
                         link={{
