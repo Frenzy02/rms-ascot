@@ -9,14 +9,18 @@ import {
     Role
 } from 'appwrite'
 
+import QRCode from 'qrcode' // Import QRCode for generating QR codes
+import crypto from 'crypto' // Import crypto for encryption
+
 export const appwriteConfig = {
-    endpoint: 'https://cloud.appwrite.io/v1',
-    projectId: '66fbb1c3002b793d9e26',
+    endpoint: 'http://localhost/v1',
+    projectId: '6703f198003d36f002fc',
     storageId: '67009d7a001d832768e4',
     databaseId: '66fd06eb0016cdc0dafd',
     userCollectionId: '66fd09a00027f5737fa0',
     uploadsCollectionId: '67009c84000c8738130e',
-    subfoldersCollectionId: '67009c300034ee85834f'
+    subfoldersCollectionId: '67009c300034ee85834f',
+    uploadsfilesCollectionId: '67048f630027104a9967'
 }
 
 const client = new Client()
@@ -100,6 +104,56 @@ export const signInUser = async (email, password) => {
     }
 }
 
+// Function to upload a file and create a file document in the database
+export const uploadFile = async (
+    file,
+    folderId,
+    fileTitle,
+    fileDescription,
+    fileHandleBy,
+    fileType
+) => {
+    try {
+        // Step 1: Upload the file to Appwrite storage
+        const fileUploaded = await storage.createFile(
+            appwriteConfig.storageId,
+            ID.unique(),
+            file,
+            [
+                Permission.read(Role.users()),
+                Permission.update(Role.users()),
+                Permission.delete(Role.users()),
+                Permission.write(Role.users())
+            ]
+        )
+
+        // Step 2: Prepare the file metadata and ensure 'size' is a string
+        const fileData = {
+            title: fileTitle || file.name,
+            description: fileDescription || '',
+            handleBy: fileHandleBy || '',
+            size: `${file.size} KB`, // Convert size to string
+            fileType: fileType || file.type,
+            folderId: folderId || '', // If no folder, keep it empty
+            fileId: fileUploaded.$id, // Link the uploaded file by its ID
+            createdAt: new Date().toISOString() // Timestamp for creation
+        }
+
+        // Step 3: Create a document with the metadata
+        const response = await databases.createDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            ID.unique(),
+            fileData
+        )
+
+        return response
+    } catch (error) {
+        console.error('Error uploading file:', error.response || error)
+        throw new Error('Failed to upload file and save metadata.')
+    }
+}
+
 // Get user data
 export const getUserData = async (uid) => {
     try {
@@ -138,40 +192,6 @@ export const fetchUsers = async () => {
             success: false,
             error: 'Failed to fetch users.'
         }
-    }
-}
-
-// Upload a file
-export const uploadFile = async (file, metadata, folderId) => {
-    try {
-        const storageResponse = await storage.createFile(
-            appwriteConfig.storageId,
-            ID.unique(),
-            file
-        )
-
-        const fileUrl = storage.getFileView(
-            appwriteConfig.storageId,
-            storageResponse.$id
-        )
-        const data = {
-            ...metadata,
-            fileUrl,
-            folderId, // Associate file with the folder
-            dateOfUpload: new Date().toISOString()
-        }
-
-        await databases.createDocument(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsCollectionId,
-            ID.unique(),
-            data
-        )
-
-        return { success: true, fileUrl }
-    } catch (error) {
-        console.error('Error uploading file:', error)
-        throw new Error('Upload failed, please try again.')
     }
 }
 
@@ -245,34 +265,49 @@ const buildFolderTree = (folders) => {
     return rootFolders
 }
 
-// Fetch folders and files
-// Fetch folders and files
 export const fetchFoldersAndFiles = async (parentFolderId = null) => {
     try {
-        let foldersResponse
+        let foldersResponse, filesResponse
 
         if (parentFolderId) {
-            // Fetch subfolders from the subfolders collection
+            // Fetch subfolders
             foldersResponse = await databases.listDocuments(
                 appwriteConfig.databaseId,
                 appwriteConfig.subfoldersCollectionId,
                 [Query.equal('parentId', parentFolderId)]
             )
+
+            // Fetch files in the folder
+            filesResponse = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.equal('folderId', parentFolderId)]
+            )
         } else {
-            // Fetch root folders from the uploads collection
+            // Fetch root folders
             foldersResponse = await databases.listDocuments(
                 appwriteConfig.databaseId,
                 appwriteConfig.uploadsCollectionId,
                 [Query.equal('type', 'folder'), Query.equal('parentId', '')]
             )
+
+            // Fetch files in the root folder
+            filesResponse = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.equal('folderId', '')]
+            )
         }
+
+        console.log('Fetched Folders: ', foldersResponse.documents)
+        console.log('Fetched Files: ', filesResponse.documents) // Log the file data
 
         return {
             folders: foldersResponse.documents.map((doc) => ({
                 ...doc,
-                subfolders: [] // Initialize subfolders
+                subfolders: []
             })),
-            files: [] // Implement file fetching if needed
+            files: filesResponse.documents
         }
     } catch (error) {
         console.error('Error fetching folders and files:', error)

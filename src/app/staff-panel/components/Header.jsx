@@ -10,7 +10,7 @@ export default function Header() {
                 <Search className="w-4 h-4 mx-3 text-gray-500" />
                 <Input
                     type="text"
-                    placeholder="Search in Drive"
+                    placeholder="Search Documents"
                     className="border-none bg-transparent focus:outline-none"
                 />
             </div>
