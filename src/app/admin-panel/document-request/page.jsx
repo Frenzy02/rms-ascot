@@ -1,6 +1,4 @@
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { useState, useEffect } from 'react'
 import {
     Table,
     TableBody,
@@ -9,6 +7,12 @@ import {
     TableHeader,
     TableRow
 } from '@/components/ui/table'
+import { CheckCircle, XCircle, Upload, Download, FileText } from 'lucide-react'
+import {
+    fetchDocumentRequests,
+    handleDocumentRequest
+} from '@/services/api/appwrite'
+import { Input } from '@/components/ui/input'
 import {
     Select,
     SelectContent,
@@ -17,96 +21,83 @@ import {
     SelectValue
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import {
-    CheckCircle,
-    XCircle,
-    Search,
-    ChevronLeft,
-    ChevronRight,
-    Upload,
-    Download,
-    FileText
-} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { toast } from 'react-toastify' // Import toast for notifications
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 
-// Mock data for demonstration
-const mockRequests = [
-    {
-        id: 1,
-        type: 'upload',
-        staffName: 'John Doe',
-        fileName: 'Annual Report 2023.pdf',
-        controlNumber: 'DOC-2023-001',
-        requestDate: '2023-05-15',
-        status: 'pending'
-    },
-    {
-        id: 2,
-        type: 'download',
-        staffName: 'Jane Smith',
-        fileName: 'Financial Statement Q2.xlsx',
-        controlNumber: 'DOC-2023-002',
-        requestDate: '2023-05-14',
-        status: 'pending'
-    },
-    {
-        id: 3,
-        type: 'upload',
-        staffName: 'Mike Johnson',
-        fileName: 'Employee Handbook v2.docx',
-        controlNumber: 'DOC-2023-003',
-        requestDate: '2023-05-13',
-        status: 'approved'
-    },
-    {
-        id: 4,
-        type: 'download',
-        staffName: 'Sarah Williams',
-        fileName: 'Project Proposal.pptx',
-        controlNumber: 'DOC-2023-004',
-        requestDate: '2023-05-12',
-        status: 'rejected'
-    }
-    // Add more mock data as needed
-]
-
-export default function DocumentRequestsTab() {
-    const [requests, setRequests] = useState(mockRequests)
+const DocumentRequestsTab = () => {
+    const [requests, setRequests] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
     const [filterType, setFilterType] = useState('all')
     const [currentPage, setCurrentPage] = useState(1)
+    const [loading, setLoading] = useState(false) // Loading state
     const itemsPerPage = 5
 
-    const handleSearch = (event) => {
-        setSearchTerm(event.target.value)
+    useEffect(() => {
+        const loadRequests = async () => {
+            setLoading(true)
+            try {
+                const data = await fetchDocumentRequests()
+                console.log('Fetched Document Requests:', data) // Log the fetched requests
+                setRequests(data) // Ensure data is correctly formatted
+            } catch (error) {
+                console.error('Failed to load document requests:', error)
+                toast.error(
+                    'Failed to load document requests: ' + error.message
+                ) // Display the error message
+            } finally {
+                setLoading(false)
+            }
+        }
+        loadRequests()
+    }, [])
+
+    const handleApprove = async (id) => {
+        try {
+            setLoading(true)
+            await handleDocumentRequest(id, 'approve')
+            updateRequestStatus(id, 'approved')
+            toast.success('Request approved successfully!')
+        } catch (error) {
+            console.error('Error approving request:', error)
+            toast.error('Failed to approve request.')
+        } finally {
+            setLoading(false)
+        }
     }
 
-    const handleFilterChange = (value) => {
-        setFilterType(value)
+    const handleReject = async (id) => {
+        try {
+            setLoading(true)
+            await handleDocumentRequest(id, 'reject')
+            updateRequestStatus(id, 'rejected')
+            toast.success('Request rejected successfully!')
+        } catch (error) {
+            console.error('Error rejecting request:', error)
+            toast.error('Failed to reject request.')
+        } finally {
+            setLoading(false)
+        }
     }
 
-    const handleApprove = (id) => {
-        setRequests(
-            requests.map((req) =>
-                req.id === id ? { ...req, status: 'approved' } : req
+    const updateRequestStatus = (id, status) => {
+        setRequests((prevRequests) =>
+            prevRequests.map((req) =>
+                req.fileId === id ? { ...req, status } : req
             )
         )
     }
 
-    const handleReject = (id) => {
-        setRequests(
-            requests.map((req) =>
-                req.id === id ? { ...req, status: 'rejected' } : req
-            )
-        )
-    }
+    const handleSearch = (e) => setSearchTerm(e.target.value)
+    const handleFilterChange = (value) => setFilterType(value)
 
     const filteredRequests = requests.filter(
         (req) =>
-            (filterType === 'all' || req.type === filterType) &&
-            (req.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                req.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (filterType === 'all' || req.fileType === filterType) &&
+            (req.handleBy?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                req.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 req.controlNumber
-                    .toLowerCase()
+                    ?.toLowerCase()
                     .includes(searchTerm.toLowerCase()))
     )
 
@@ -117,13 +108,13 @@ export default function DocumentRequestsTab() {
 
     const handleNextPage = () => {
         if (currentPage * itemsPerPage < filteredRequests.length) {
-            setCurrentPage((prevPage) => prevPage + 1)
+            setCurrentPage((prev) => prev + 1)
         }
     }
 
     const handlePreviousPage = () => {
         if (currentPage > 1) {
-            setCurrentPage((prevPage) => prevPage - 1)
+            setCurrentPage((prev) => prev - 1)
         }
     }
 
@@ -132,9 +123,10 @@ export default function DocumentRequestsTab() {
             <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6 rounded-lg shadow-lg mb-6">
                 <h1 className="text-3xl font-bold">Document Requests</h1>
                 <p className="text-purple-100">
-                    Manage and review document requests
+                    Manage and review document requests.
                 </p>
             </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-4 sm:space-y-0">
                 <div className="flex items-center space-x-2 w-full sm:w-auto">
                     <Input
@@ -160,105 +152,119 @@ export default function DocumentRequestsTab() {
                     </SelectContent>
                 </Select>
             </div>
+
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-gray-100">
-                            <TableHead className="font-bold">Type</TableHead>
-                            <TableHead className="font-bold">
-                                Staff Name
-                            </TableHead>
-                            <TableHead className="font-bold">
-                                File Name
-                            </TableHead>
-                            <TableHead className="font-bold">
-                                Control Number
-                            </TableHead>
-                            <TableHead className="font-bold">
-                                Request Date
-                            </TableHead>
-                            <TableHead className="font-bold">Status</TableHead>
-                            <TableHead className="font-bold">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {paginatedRequests.map((request) => (
-                            <TableRow
-                                key={request.id}
-                                className="hover:bg-purple-50 transition-colors">
-                                <TableCell>
-                                    <Badge
-                                        variant="outline"
-                                        className={`${
-                                            request.type === 'upload'
-                                                ? 'bg-green-100 text-green-800'
-                                                : 'bg-blue-100 text-blue-800'
-                                        } flex items-center space-x-1`}>
-                                        {request.type === 'upload' ? (
-                                            <Upload className="w-4 h-4" />
-                                        ) : (
-                                            <Download className="w-4 h-4" />
-                                        )}
-                                        <span>{request.type}</span>
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>{request.staffName}</TableCell>
-                                <TableCell className="flex items-center space-x-2">
-                                    <FileText className="w-4 h-4 text-gray-400" />
-                                    <span>{request.fileName}</span>
-                                </TableCell>
-                                <TableCell>{request.controlNumber}</TableCell>
-                                <TableCell>{request.requestDate}</TableCell>
-                                <TableCell>
-                                    <Badge
-                                        variant={
-                                            request.status === 'approved'
-                                                ? 'success'
-                                                : request.status === 'rejected'
-                                                ? 'destructive'
-                                                : 'default'
-                                        }
-                                        className={`${
-                                            request.status === 'approved'
-                                                ? 'bg-green-100 text-green-800'
-                                                : request.status === 'rejected'
-                                                ? 'bg-red-100 text-red-800'
-                                                : 'bg-yellow-100 text-yellow-800'
-                                        }`}>
-                                        {request.status}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    {request.status === 'pending' && (
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    handleApprove(request.id)
-                                                }
-                                                className="bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700">
-                                                <CheckCircle className="w-4 h-4 mr-1" />{' '}
-                                                Approve
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={() =>
-                                                    handleReject(request.id)
-                                                }
-                                                className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700">
-                                                <XCircle className="w-4 h-4 mr-1" />{' '}
-                                                Reject
-                                            </Button>
-                                        </div>
-                                    )}
-                                </TableCell>
+                {loading ? (
+                    <p className="text-center p-4">Loading requests...</p>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-gray-100">
+                                <TableHead className="font-bold">
+                                    Type
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    Staff Name
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    File Name
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    Control Number
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    Request Date
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    Status
+                                </TableHead>
+                                <TableHead className="font-bold">
+                                    Actions
+                                </TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {paginatedRequests.map((request) => (
+                                <TableRow
+                                    key={request.fileId}
+                                    className="hover:bg-purple-50">
+                                    <TableCell>
+                                        <Badge
+                                            variant="outline"
+                                            className={`${
+                                                request.fileType === 'upload'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : 'bg-blue-100 text-blue-800'
+                                            } flex items-center space-x-1`}>
+                                            {request.fileType === 'upload' ? (
+                                                <Upload className="w-4 h-4" />
+                                            ) : (
+                                                <Download className="w-4 h-4" />
+                                            )}
+                                            <span className="ml-2">
+                                                {request.fileType}
+                                            </span>
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>{request.handleBy}</TableCell>
+                                    <TableCell>
+                                        <FileText className="mr-2" />
+                                        {request.title}
+                                    </TableCell>
+                                    <TableCell>
+                                        {request.controlNumber}
+                                    </TableCell>
+                                    <TableCell>{request.requestDate}</TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            className={`${
+                                                request.status === 'approved'
+                                                    ? 'bg-green-100'
+                                                    : request.status ===
+                                                      'rejected'
+                                                    ? 'bg-red-100'
+                                                    : 'bg-yellow-100'
+                                            }`}>
+                                            {request.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                        {request.status === 'pending' && (
+                                            <div className="flex space-x-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        handleApprove(
+                                                            request.fileId
+                                                        )
+                                                    }
+                                                    className="bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700">
+                                                    <CheckCircle className="w-4 h-4 mr-1" />
+                                                    Approve
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        handleReject(
+                                                            request.fileId
+                                                        )
+                                                    }
+                                                    className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700">
+                                                    <XCircle className="w-4 h-4 mr-1" />
+                                                    Reject
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
             </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-4 sm:space-y-0">
                 <div className="text-sm text-gray-500">
                     Showing {paginatedRequests.length} of{' '}
@@ -289,3 +295,5 @@ export default function DocumentRequestsTab() {
         </div>
     )
 }
+
+export default DocumentRequestsTab

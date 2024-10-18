@@ -26,6 +26,7 @@ import {
     signUpUser
 } from '@/services/api/appwrite'
 
+// Register cardio animation
 cardio.register()
 
 // Initialize Appwrite Account
@@ -35,10 +36,8 @@ const account = new Account(
         .setProject(appwriteConfig.projectId)
 )
 
-// Main Modal Component
 export default function LogInSignUpModal({ onClose }) {
     const [showPassword, setShowPassword] = useState(false)
-    const [error, setError] = useState('')
     const [isFlipped, setIsFlipped] = useState(false)
     const [isOpen, setIsOpen] = useState(true)
     const [formData, setFormData] = useState({
@@ -58,24 +57,18 @@ export default function LogInSignUpModal({ onClose }) {
     }))
 
     useEffect(() => {
-        // Check Appwrite session and get user data if logged in
         const checkAuthState = async () => {
             try {
-                const user = await account.get() // Get the current authenticated user
+                const user = await account.get()
                 if (user) {
                     const userData = await getUserData(user.$id)
                     setAuthUser(userData)
-
-                    // Redirect based on user role
-                    if (userData) {
-                        redirectUser(userData.role)
-                    }
+                    redirectUser(userData.role)
                 }
             } catch (error) {
                 console.error('Error checking auth state:', error)
             }
         }
-
         checkAuthState()
     }, [router, setAuthUser])
 
@@ -93,66 +86,47 @@ export default function LogInSignUpModal({ onClose }) {
         setLoading(true)
         const response = await signUpUser(formData)
         setLoading(false)
-
-        if (response.success) {
-            toast.success('Registration successful!')
-            setAuthUser(response.user)
-
-            // Redirect based on role
-            redirectUser(response.user.role)
-        } else {
-            toast.error(response.error)
-        }
+        response.success
+            ? (toast.success('Registration successful!'),
+              setAuthUser(response.user),
+              redirectUser(response.user.role))
+            : toast.error(response.error)
     }
 
     const handleLogin = async (e) => {
         e.preventDefault()
         setLoading(true)
-
         const response = await signInUser(formData.email, formData.password)
         setLoading(false)
-
-        if (response.success) {
-            toast.success('You have successfully logged in.')
-            setAuthUser(response.user)
-
-            // Redirect based on user role
-            redirectUser(response.user.role)
-        } else {
-            toast.error(response.error)
-        }
+        response.success
+            ? (toast.success('You have successfully logged in.'),
+              setAuthUser(response.user),
+              redirectUser(response.user.role))
+            : toast.error(response.error)
     }
 
     const redirectUser = (role) => {
-        if (role === 'admin') {
-            router.push('/admin-panel')
-        } else if (role === 'staff') {
-            router.push('/staff-panel')
-        } else if (role === 'viewer') {
-            router.push('/viewer-panel')
-        } else {
-            router.push('/')
+        const routes = {
+            admin: '/admin-panel',
+            staff: '/staff-panel',
+            viewer: '/viewer-panel'
         }
+        router.push(routes[role] || '/')
     }
 
-    const handleFlip = () => {
-        setIsFlipped((prev) => !prev)
-    }
-
-    const closeModal = () => {
-        setIsOpen(false)
-    }
+    const handleFlip = () => setIsFlipped((prev) => !prev)
+    const closeModal = () => setIsOpen(false)
 
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 p-4">
             <ToastContainer />
             <div className={`flip-card ${isFlipped ? 'flipped' : ''}`}>
                 <div className="flip-card-inner">
                     {/* Sign Up Card */}
                     <div className="flip-card-front">
-                        <Card className="w-[350px] bg-gray-800 text-white relative">
+                        <Card className="w-full max-w-[350px] bg-gray-800 text-white relative">
                             <button
                                 onClick={closeModal}
                                 className="absolute top-4 right-4 text-gray-400 hover:text-white">
@@ -167,7 +141,7 @@ export default function LogInSignUpModal({ onClose }) {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <ScrollArea className="h-[300px] pr-4">
+                                <ScrollArea className="h-[300px] overflow-y-auto pr-2">
                                     <form
                                         className="space-y-4"
                                         onSubmit={handleSignup}>
@@ -206,76 +180,32 @@ export default function LogInSignUpModal({ onClose }) {
                                             value={formData.email}
                                             onChange={handleInputChange}
                                         />
-                                        <InputField
-                                            label="Password"
+                                        <PasswordInput
                                             name="password"
-                                            type={
-                                                showPassword
-                                                    ? 'text'
-                                                    : 'password'
-                                            }
+                                            label="Password"
                                             value={formData.password}
-                                            onChange={handleInputChange}
-                                            endAdornment={
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setShowPassword(
-                                                            !showPassword
-                                                        )
-                                                    }
-                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                                    {showPassword ? (
-                                                        <EyeOff />
-                                                    ) : (
-                                                        <Eye />
-                                                    )}
-                                                </button>
+                                            showPassword={showPassword}
+                                            onToggle={() =>
+                                                setShowPassword(!showPassword)
                                             }
+                                            onChange={handleInputChange}
                                         />
-                                        <InputField
-                                            label="Confirm Password"
+                                        <PasswordInput
                                             name="confirmPassword"
-                                            type={
-                                                showPassword
-                                                    ? 'text'
-                                                    : 'password'
-                                            }
+                                            label="Confirm Password"
                                             value={formData.confirmPassword}
-                                            onChange={handleInputChange}
-                                            endAdornment={
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        setShowPassword(
-                                                            !showPassword
-                                                        )
-                                                    }
-                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                                    {showPassword ? (
-                                                        <EyeOff />
-                                                    ) : (
-                                                        <Eye />
-                                                    )}
-                                                </button>
+                                            showPassword={showPassword}
+                                            onToggle={() =>
+                                                setShowPassword(!showPassword)
                                             }
+                                            onChange={handleInputChange}
                                         />
-                                        {error && (
-                                            <p className="text-red-500">
-                                                {error}
-                                            </p>
-                                        )}
                                         <Button
                                             type="submit"
-                                            className="w-full bg-blue-600 flex items-center justify-center"
+                                            className="w-full bg-blue-600"
                                             disabled={loading}>
                                             {loading ? (
-                                                <l-cardio
-                                                    size="24"
-                                                    stroke="4"
-                                                    speed="2"
-                                                    color="white"
-                                                />
+                                                <LoadingSpinner />
                                             ) : (
                                                 'Sign Up'
                                             )}
@@ -283,7 +213,7 @@ export default function LogInSignUpModal({ onClose }) {
                                     </form>
                                 </ScrollArea>
                             </CardContent>
-                            <CardFooter className="flex justify-between">
+                            <CardFooter>
                                 <p className="text-gray-400">
                                     Already have an account?
                                 </p>
@@ -295,9 +225,10 @@ export default function LogInSignUpModal({ onClose }) {
                             </CardFooter>
                         </Card>
                     </div>
+
                     {/* Log In Card */}
                     <div className="flip-card-back">
-                        <Card className="w-[350px] bg-gray-800 text-white relative">
+                        <Card className="w-full max-w-[350px] bg-gray-800 text-white relative">
                             <button
                                 onClick={closeModal}
                                 className="absolute top-4 right-4 text-gray-400 hover:text-white">
@@ -323,52 +254,29 @@ export default function LogInSignUpModal({ onClose }) {
                                         value={formData.email}
                                         onChange={handleInputChange}
                                     />
-                                    <InputField
-                                        label="Password"
+                                    <PasswordInput
                                         name="password"
-                                        type={
-                                            showPassword ? 'text' : 'password'
-                                        }
+                                        label="Password"
                                         value={formData.password}
-                                        onChange={handleInputChange}
-                                        endAdornment={
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    setShowPassword(
-                                                        !showPassword
-                                                    )
-                                                }
-                                                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                                {showPassword ? (
-                                                    <EyeOff />
-                                                ) : (
-                                                    <Eye />
-                                                )}
-                                            </button>
+                                        showPassword={showPassword}
+                                        onToggle={() =>
+                                            setShowPassword(!showPassword)
                                         }
+                                        onChange={handleInputChange}
                                     />
-                                    {error && (
-                                        <p className="text-red-500">{error}</p>
-                                    )}
                                     <Button
                                         type="submit"
-                                        className="w-full bg-blue-600 flex items-center justify-center"
+                                        className="w-full bg-blue-600"
                                         disabled={loading}>
                                         {loading ? (
-                                            <l-cardio
-                                                size="24"
-                                                stroke="4"
-                                                speed="2"
-                                                color="white"
-                                            />
+                                            <LoadingSpinner />
                                         ) : (
                                             'Log In'
                                         )}
                                     </Button>
                                 </form>
                             </CardContent>
-                            <CardFooter className="flex justify-between">
+                            <CardFooter>
                                 <p className="text-gray-400">
                                     Don't have an account?
                                 </p>
@@ -381,37 +289,44 @@ export default function LogInSignUpModal({ onClose }) {
                         </Card>
                     </div>
                 </div>
-                <style jsx>{`
-                    .flip-card {
-                        width: 350px;
-                        height: 500px;
-                        perspective: 1000px;
-                    }
-                    .flip-card-inner {
-                        position: relative;
-                        width: 100%;
-                        height: 100%;
-                        transition: transform 0.6s;
-                        transform-style: preserve-3d;
-                    }
-                    .flip-card.flipped .flip-card-inner {
-                        transform: rotateY(180deg);
-                    }
-                    .flip-card-front,
-                    .flip-card-back {
-                        position: absolute;
-                        width: 100%;
-                        height: 100%;
-                        backface-visibility: hidden;
-                    }
-                    .flip-card-back {
-                        transform: rotateY(180deg);
-                    }
-                    input[type='radio'] {
-                        accent-color: white;
-                    }
-                `}</style>
             </div>
+            <style jsx>{`
+                .flip-card {
+                    width: 100%;
+                    max-width: 350px;
+                    height: 500px;
+                    perspective: 1000px; /* Gives the 3D effect */
+                    position: relative;
+                }
+                .flip-card-inner {
+                    position: absolute;
+                    width: 100%;
+                    height: 100%;
+                    transition: transform 0.6s;
+                    transform-style: preserve-3d;
+                }
+                .flip-card.flipped .flip-card-inner {
+                    transform: rotateY(180deg); /* Rotate when flipped */
+                }
+                .flip-card-front,
+                .flip-card-back {
+                    position: absolute;
+                    width: 100%;
+                    height: 100%;
+                    backface-visibility: hidden; /* Prevents seeing the back */
+                    overflow-y: auto; /* Ensure each side is scrollable */
+                    z-index: 1; /* Ensure cards stack properly */
+                }
+                .flip-card-back {
+                    transform: rotateY(180deg);
+                    z-index: 0; /* Ensure it stays behind initially */
+                }
+                @media (max-width: 768px) {
+                    .flip-card {
+                        max-width: 90%; /* Adjust for mobile screens */
+                    }
+                }
+            `}</style>
         </div>
     )
 }
@@ -439,6 +354,11 @@ const InputField = ({
             className="mt-1 bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
         />
         {endAdornment}
+    </div>
+)
+const LoadingSpinner = () => (
+    <div className="flex items-center justify-center">
+        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white"></div>
     </div>
 )
 
@@ -493,5 +413,34 @@ const GenderSelect = ({ formData, setFormData }) => (
                 </span>
             </label>
         </div>
+    </div>
+)
+// PasswordInput Component Definition
+const PasswordInput = ({
+    name,
+    label,
+    value,
+    showPassword,
+    onToggle,
+    onChange
+}) => (
+    <div className="relative">
+        <Label htmlFor={name} className="text-gray-400">
+            {label}
+        </Label>
+        <Input
+            name={name}
+            type={showPassword ? 'text' : 'password'}
+            placeholder={label}
+            value={value}
+            onChange={onChange}
+            className="mt-1 bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50"
+        />
+        <button
+            type="button"
+            onClick={onToggle}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400">
+            {showPassword ? <EyeOff /> : <Eye />}
+        </button>
     </div>
 )

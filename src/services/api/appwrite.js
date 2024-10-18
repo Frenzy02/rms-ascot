@@ -9,18 +9,20 @@ import {
     Role
 } from 'appwrite'
 
-import QRCode from 'qrcode' // Import QRCode for generating QR codes
-import crypto from 'crypto' // Import crypto for encryption
+import QRCode from 'qrcode'
+import crypto from 'crypto'
 
 export const appwriteConfig = {
-    endpoint: 'http://localhost/v1',
-    projectId: '6703f198003d36f002fc',
-    storageId: '67009d7a001d832768e4',
-    databaseId: '66fd06eb0016cdc0dafd',
-    userCollectionId: '66fd09a00027f5737fa0',
-    uploadsCollectionId: '67009c84000c8738130e',
-    subfoldersCollectionId: '67009c300034ee85834f',
-    uploadsfilesCollectionId: '67048f630027104a9967'
+    endpoint: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
+    projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID,
+    storageId: process.env.NEXT_PUBLIC_APPWRITE_STORAGE_ID,
+    databaseId: process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID,
+    userCollectionId: process.env.NEXT_PUBLIC_APPWRITE_USER_COLLECTION_ID,
+    uploadsCollectionId: process.env.NEXT_PUBLIC_APPWRITE_UPLOADS_COLLECTION_ID,
+    subfoldersCollectionId:
+        process.env.NEXT_PUBLIC_APPWRITE_SUBFOLDERS_COLLECTION_ID,
+    uploadsfilesCollectionId:
+        process.env.NEXT_PUBLIC_APPWRITE_UPLOADSFILES_COLLECTION_ID
 }
 
 const client = new Client()
@@ -29,6 +31,8 @@ client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
 const account = new Account(client)
 const storage = new Storage(client)
 const databases = new Databases(client)
+
+export { client, account, storage, databases }
 
 // User signup
 export const signUpUser = async (formData) => {
@@ -75,17 +79,29 @@ export const signUpUser = async (formData) => {
 }
 
 // User sign-in
+// User sign-in
 export const signInUser = async (email, password) => {
     try {
         const session = await account.createEmailPasswordSession(
             email,
             password
         )
+
+        // Save the session token
+        sessionStorage.setItem('token', session.$id)
+
         const userData = await getUserData(session.userId)
 
         if (!userData) {
             throw new Error('User data not found.')
         }
+
+        // Store user data in session storage
+        sessionStorage.setItem('isLoggedIn', 'true')
+        sessionStorage.setItem('username', userData.username || email)
+        sessionStorage.setItem('email', email)
+        sessionStorage.setItem('userId', userData.$id) // Ensure userId is stored
+        console.log('User ID stored in session storage:', userData.$id) // Log the user ID
 
         return {
             success: true,
@@ -157,12 +173,11 @@ export const uploadFile = async (
 // Get user data
 export const getUserData = async (uid) => {
     try {
-        const userDoc = await databases.getDocument(
+        return await databases.getDocument(
             appwriteConfig.databaseId,
             appwriteConfig.userCollectionId,
             uid
         )
-        return userDoc
     } catch (error) {
         console.error('Error fetching user data:', error)
         return null
@@ -332,22 +347,113 @@ export const fetchRecords = async () => {
     }
 }
 
-// Fetch user files
 export const fetchUserFiles = async (userId) => {
     try {
-        const snapshot = await databases.listDocuments(
+        // Query to fetch files where userId matches
+        const response = await databases.listDocuments(
             appwriteConfig.databaseId,
-            appwriteConfig.uploadsCollectionId,
-            [Query.equal('userId', userId)]
+            appwriteConfig.uploadsfilesCollectionId,
+            [Query.equal('userId', userId)] // Filter based on userId
         )
 
-        return snapshot.documents.map((doc) => ({
-            id: doc.$id,
-            ...doc
+        // Ensure that each file object contains the qrCodeUrl
+        const userFiles = response.documents.map((file) => ({
+            id: file.$id,
+            title: file.title || 'Untitled',
+            description: file.description || '',
+            fileType: file.fileType || 'Unknown',
+            size: file.size || '0 KB',
+            createdAt: file.createdAt || new Date().toISOString(),
+            qrCodeUrl: file.qrCodeUrl || null // Ensure qrCodeUrl is included
         }))
+
+        return userFiles
     } catch (error) {
-        console.error('Error fetching files:', error)
-        throw new Error('Failed to load files.')
+        console.error('Error fetching user files:', error)
+        throw new Error('Failed to fetch user files.')
+    }
+}
+
+export const uploadDocumentRequest = async (file, metadata) => {
+    try {
+        const uploadedFile = await storage.createFile(
+            appwriteConfig.storageId,
+            ID.unique(),
+            file,
+            [Permission.read(Role.users()), Permission.write(Role.users())]
+        )
+
+        const requestData = {
+            ...metadata,
+            fileId: uploadedFile.$id // Link the uploaded file by its ID
+        }
+
+        // You might want to return just the uploaded file data
+        return {
+            fileId: uploadedFile.$id,
+            requestData // Include the requestData if needed
+        }
+    } catch (error) {
+        console.error('Error uploading document request:', error)
+        throw new Error('Failed to upload document request.')
+    }
+}
+
+export const fetchDocumentRequests = async () => {
+    try {
+        // Fetch all documents from the uploads files collection
+        const snapshot = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            [Query.equal('status', 'pending')] // Adjust query for specific needs
+        )
+        console.log('Document Requests:', snapshot.documents) // Log the fetched requests
+        return snapshot.documents // Return the documents
+    } catch (error) {
+        console.error('Error fetching document requests:', error) // Log any errors
+        throw new Error('Failed to fetch document requests.') // Re-throw for handling in the calling function
+    }
+}
+
+export const handleDocumentRequest = async (requestId, action) => {
+    try {
+        // Update the document based on action (approve or reject)
+        const updatedData = {
+            status: action === 'approve' ? 'approved' : 'rejected',
+            updatedAt: new Date().toISOString()
+        }
+
+        // Update the request in the uploadsfilesCollectionId
+        const response = await databases.updateDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            requestId,
+            updatedData
+        )
+
+        // If approved, additional logic can be added to manage files
+        if (action === 'approve') {
+            // You can add logic here to manage the files after approval
+            // For example, moving them to another folder or changing permissions
+        } else {
+            // If rejected, you may want to delete the associated file from storage
+            await deleteFile(response.fileId) // Assuming response has a fileId field
+        }
+
+        return response
+    } catch (error) {
+        console.error('Error handling document request:', error)
+        throw new Error('Failed to handle document request.')
+    }
+}
+
+// Function to delete a file from storage
+const deleteFile = async (fileId) => {
+    try {
+        await storage.deleteFile(appwriteConfig.storageId, fileId)
+    } catch (error) {
+        console.error('Error deleting file:', error)
+        throw new Error('Failed to delete file from storage.')
     }
 }
 

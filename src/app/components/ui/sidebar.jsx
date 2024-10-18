@@ -83,7 +83,7 @@ export const DesktopSidebar = ({ className, children, ...props }) => {
                     />
                     {open && (
                         <span className="text-xl font-bold text-neutral-200">
-                            ASCOT Clinic
+                            ASCOT RMS
                         </span>
                     )}
                 </div>
@@ -97,7 +97,9 @@ export const DesktopSidebar = ({ className, children, ...props }) => {
                         alt="User Profile"
                         className="h-8 w-8 rounded-full mr-2"
                     />
-                    <span className="text-sm text-neutral-300">Clinic App</span>
+                    <span className="text-sm text-neutral-300">
+                        Aurora State College of Technology
+                    </span>
                 </div>
             )}
         </motion.div>
@@ -145,7 +147,7 @@ export const MobileSidebar = ({ className, children, ...props }) => {
                                     className="h-8 w-8"
                                 />
                                 <span className="text-xl font-bold text-neutral-200">
-                                    ASCOT Clinic
+                                    Aurora State College of Technology
                                 </span>
                             </div>
                         </div>

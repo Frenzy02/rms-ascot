@@ -1,24 +1,7 @@
 {
     "compilerOptions": {
-        "target": "ES6",
-        "module": "ESNext",
-        "lib": ["DOM", "ESNext"],
-        "allowJs": true,
-        "jsx": "react-jsx",
-        "moduleResolution": "node",
-        "skipLibCheck": true,
-        "esModuleInterop": true,
-        "forceConsistentCasingInFileNames": true,
-        "strict": true,
-        "noImplicitAny": false,
-        "isolatedModules": true,
-        "outDir": "./dist",
-        "resolveJsonModule": true,
-        "baseUrl": ".",
         "paths": {
-            "@/*": ["src/*"]
+            "@/*": ["./src/*"]
         }
-    },
-    "include": ["src/**/*"], // Correct wildcard pattern
-    "exclude": ["node_modules"]
+    }
 }
