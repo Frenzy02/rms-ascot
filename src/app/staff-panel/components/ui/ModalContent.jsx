@@ -4,13 +4,11 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { X, Upload, FileUp } from 'lucide-react'
-import QRCode from 'qrcode'
+import { toast } from 'react-toastify' // Import toast from react-toastify
+import 'react-toastify/dist/ReactToastify.css' // Import the toast styles
 import {
     uploadDocumentRequest,
-    fetchFoldersAndFiles,
-    storage, // Import storage from Appwrite services
-    databases,
-    appwriteConfig
+    fetchFoldersAndFiles
 } from '@/services/api/appwrite'
 import { ID } from 'appwrite'
 
@@ -24,7 +22,6 @@ export default function ModalContent({ onClose }) {
     const [file, setFile] = useState(null)
     const [userId, setUserId] = useState('')
     const [dragActive, setDragActive] = useState(false)
-    const [qrCodeUrl, setQrCodeUrl] = useState('')
 
     useEffect(() => {
         const loadFolders = async () => {
@@ -51,12 +48,15 @@ export default function ModalContent({ onClose }) {
     const handleFileChange = (e) => setFile(e.target.files[0])
 
     const handleUpload = async () => {
-        if (!file) return alert('Please attach a valid file.')
-        if (!folderId) return alert('Please select a folder.')
-        if (!fileType) return alert('Please select a file type.')
+        if (!file) return toast.error('Please attach a valid file.')
+        if (!folderId) return toast.error('Please select a folder.')
+        if (!fileType) return toast.error('Please select a file type.')
 
         try {
-            // Step 1: Upload the document file and get the fileId
+            // Step 1: Generate a control number
+            const controlNumber = `CN-${userId}-${Date.now()}`
+
+            // Step 2: Upload the document file and get the fileId
             const response = await uploadDocumentRequest(file, {
                 title,
                 description,
@@ -64,79 +64,36 @@ export default function ModalContent({ onClose }) {
                 userId,
                 folderId,
                 fileType,
+                controlNumber, // Add control number to metadata
                 status: 'pending',
                 createdAt: new Date().toISOString(),
                 requestDate: new Date().toLocaleDateString()
             })
 
-            const fileId = response.fileId
+            if (response && response.fileId) {
+                console.log(
+                    'Document created successfully with Control Number:',
+                    controlNumber
+                )
 
-            // Step 2: Generate a QR code as a base64 string
-            const fileUrl = `${process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT}/storage/files/${fileId}/view?project=${process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID}`
-            const qrCodeBase64 = await QRCode.toDataURL(fileUrl) // Generate base64 QR code
+                toast.success(
+                    'Document request submitted successfully. Wait for admin confirmation.'
+                )
 
-            // Step 3: Upload the QR code to Appwrite Storage
-            const qrCodeBlob = await fetch(qrCodeBase64).then((res) =>
-                res.blob()
-            )
-            const qrCodeFile = new File([qrCodeBlob], `${fileId}-qrcode.png`, {
-                type: 'image/png'
-            })
-
-            const qrCodeUploadResponse = await storage.createFile(
-                appwriteConfig.storageId,
-                ID.unique(),
-                qrCodeFile
-            )
-
-            if (!qrCodeUploadResponse) {
-                console.error('Failed to upload QR code.')
-                return alert('QR code upload failed.')
+                // Reset fields
+                setTitle('')
+                setDescription('')
+                setHandleBy('')
+                setFile(null)
+                setFolderId('')
+                setFileType('')
+                onClose()
+            } else {
+                toast.error('Failed to store metadata in the database.')
             }
-
-            const qrCodeFileUrl = `${process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT}/storage/files/${qrCodeUploadResponse.$id}/view?project=${process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID}`
-
-            console.log('QR Code URL:', qrCodeFileUrl)
-
-            // Step 4: Generate URL for the uploaded QR code image
-
-            // Step 5: Store file metadata along with the QR code image URL in the database
-            await databases.createDocument(
-                appwriteConfig.databaseId,
-                appwriteConfig.uploadsfilesCollectionId,
-                ID.unique(),
-                {
-                    title,
-                    description,
-                    handleBy,
-                    userId,
-                    folderId,
-                    fileType,
-                    fileId,
-                    status: 'pending',
-                    createdAt: new Date().toISOString(),
-                    requestDate: new Date().toLocaleDateString(),
-                    qrCodeUrl: qrCodeFileUrl // Store the URL to the uploaded QR code image
-                }
-            )
-
-            console.log('Document and QR code created successfully')
-
-            // Update the state to display the QR code in the UI
-            setQrCodeUrl(qrCodeFileUrl)
-
-            alert('Document request submitted successfully.')
-            // Reset fields
-            setTitle('')
-            setDescription('')
-            setHandleBy('')
-            setFile(null)
-            setFolderId('')
-            setFileType('')
-            onClose()
         } catch (error) {
             console.error('Error uploading file:', error)
-            alert('Upload failed, please try again.')
+            toast.error('Upload failed, please try again.')
         }
     }
 
@@ -272,16 +229,6 @@ export default function ModalContent({ onClose }) {
                             )}
                         </div>
                     </div>
-                    {qrCodeUrl && (
-                        <div className="mt-4">
-                            <Label className="text-purple-600">QR Code</Label>
-                            <img
-                                src={qrCodeUrl}
-                                alt="QR Code"
-                                className="w-32 h-32 mx-auto"
-                            />
-                        </div>
-                    )}
                     <div className="flex justify-end space-x-2 pt-4 border-t border-gray-200">
                         <Button variant="outline" onClick={onClose}>
                             Cancel

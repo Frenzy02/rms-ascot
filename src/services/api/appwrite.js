@@ -347,24 +347,30 @@ export const fetchRecords = async () => {
     }
 }
 
+// Fetch user files that have been approved
 export const fetchUserFiles = async (userId) => {
     try {
-        // Query to fetch files where userId matches
+        // Query to fetch files where userId matches and status is approved
         const response = await databases.listDocuments(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
-            [Query.equal('userId', userId)] // Filter based on userId
+            [
+                Query.equal('userId', userId),
+                Query.equal('status', 'approved') // Fetch only approved files
+            ]
         )
 
-        // Ensure that each file object contains the qrCodeUrl
+        // Ensure that each file object contains the relevant metadata
         const userFiles = response.documents.map((file) => ({
             id: file.$id,
             title: file.title || 'Untitled',
             description: file.description || '',
             fileType: file.fileType || 'Unknown',
             size: file.size || '0 KB',
+            controlNumber: file.controlNumber || '',
             createdAt: file.createdAt || new Date().toISOString(),
-            qrCodeUrl: file.qrCodeUrl || null // Ensure qrCodeUrl is included
+
+            status: file.status || 'pending' // Add status to display if needed
         }))
 
         return userFiles
@@ -376,6 +382,8 @@ export const fetchUserFiles = async (userId) => {
 
 export const uploadDocumentRequest = async (file, metadata) => {
     try {
+        // Step 1: Upload the file
+        console.log('Uploading file: ', file.name) // Log file details
         const uploadedFile = await storage.createFile(
             appwriteConfig.storageId,
             ID.unique(),
@@ -383,19 +391,36 @@ export const uploadDocumentRequest = async (file, metadata) => {
             [Permission.read(Role.users()), Permission.write(Role.users())]
         )
 
+        if (!uploadedFile.$id) {
+            throw new Error('File upload failed, no file ID returned.')
+        }
+
+        console.log('File uploaded successfully with ID:', uploadedFile.$id)
+
+        // Step 2: Store file metadata in the database
         const requestData = {
             ...metadata,
             fileId: uploadedFile.$id // Link the uploaded file by its ID
         }
 
-        // You might want to return just the uploaded file data
+        console.log('Saving metadata to database:', requestData)
+
+        const response = await databases.createDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            ID.unique(),
+            requestData
+        )
+
+        console.log('Metadata saved successfully:', response)
+
         return {
             fileId: uploadedFile.$id,
-            requestData // Include the requestData if needed
+            requestData
         }
     } catch (error) {
         console.error('Error uploading document request:', error)
-        throw new Error('Failed to upload document request.')
+        throw new Error('Failed to upload document request and store metadata.')
     }
 }
 

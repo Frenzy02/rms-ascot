@@ -13,9 +13,9 @@ import { Client, Account } from 'appwrite'
 import { useRouter } from 'next/navigation'
 import { QrCode, History, Bell, FileText, Folder } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import QRCode from 'qrcode'
 import jsQR from 'jsqr'
 
-// Remove the problematic Radix Dialog for now and replace it with a custom modal
 const client = new Client()
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
 const account = new Account(client)
@@ -30,6 +30,9 @@ export default function HomePage() {
     const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
     const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
     const [scannedData, setScannedData] = useState('No result') // State for scanned QR data
+    const [qrCodeData, setQrCodeData] = useState('') // State for QR code generation
+    const [selectedFile, setSelectedFile] = useState(null) // Track the selected file for QR generation
+    const [isQrModalOpen, setIsQrModalOpen] = useState(false) // Control QR generation modal visibility
     const router = useRouter()
 
     const videoRef = useRef(null)
@@ -64,10 +67,33 @@ export default function HomePage() {
         }
     }, [userId])
 
-    const handleFileClick = (file) => {
-        console.log('File clicked:', file)
+    // QR Code Generation Modal logic
+    const generateQRCode = async (file) => {
+        try {
+            if (!file.controlNumber) {
+                throw new Error('Control number is missing for this file.')
+            }
+
+            const qrCodeUrl = await QRCode.toDataURL(file.controlNumber)
+            setQrCodeData(qrCodeUrl)
+            setSelectedFile(file)
+            setIsQrModalOpen(true)
+        } catch (err) {
+            console.error('Failed to generate QR code:', err)
+            toast.error('Failed to generate QR code: ' + err.message)
+        }
     }
 
+    const handleFileClick = (file) => {
+        console.log('File clicked:', file)
+        if (file.controlNumber) {
+            generateQRCode(file)
+        } else {
+            console.warn('Control number is missing for the selected file.')
+        }
+    }
+
+    // QR Code Scanner logic
     const startQRCodeScanner = () => {
         navigator.mediaDevices
             .getUserMedia({ video: { facingMode: 'environment' } })
@@ -83,6 +109,9 @@ export default function HomePage() {
             })
             .catch((err) => {
                 console.error('Error accessing camera: ' + err)
+                toast.error(
+                    'Failed to access camera. Please check permissions.'
+                )
             })
     }
 
@@ -111,9 +140,9 @@ export default function HomePage() {
                 setScannedData(code.data) // Set the QR code result
                 setIsQrScannerOpen(false) // Close scanner after successful scan
                 toast.success(`QR Code Scanned: ${code.data}`)
-                stopQRCodeScanner()
+                stopQRCodeScanner() // Stop camera after scan
             } else {
-                requestAnimationFrame(scanQRCode)
+                requestAnimationFrame(scanQRCode) // Continue scanning
             }
         }
     }
@@ -144,17 +173,17 @@ export default function HomePage() {
     }
 
     return (
-        <div className="flex h-screen bg-gradient-to-br from-purple-100 to-blue-100">
+        <div className="flex h-screen bg-white">
             <Sidebar
                 selectedItem={selectedItem}
                 setSelectedItem={setSelectedItem}
-                onLogout={handleLogoutClick} // Trigger logout modal
+                onLogout={handleLogoutClick}
                 onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
             />
 
             <div className="flex-1 flex flex-col">
                 <Header />
-                <ScrollArea className="flex-1 p-6">
+                <ScrollArea className="flex-1 p-6 pb-20">
                     <h2 className="text-2xl font-bold mb-4 text-gray-800">
                         My Drive
                     </h2>
@@ -191,7 +220,7 @@ export default function HomePage() {
 
             {/* Mobile Bottom Navigation */}
             <nav
-                className={`fixed bottom-0 w-full ${
+                className={`fixed bottom-0 w-full z-10 ${
                     isSidebarOpen ? '-translate-y-20' : ''
                 } transition-transform duration-300 lg:hidden`}>
                 <div className="relative flex justify-around items-center h-20 bg-black/50 backdrop-blur-lg rounded-t-3xl shadow-lg px-4">
@@ -209,7 +238,7 @@ export default function HomePage() {
                         <button
                             onClick={() => {
                                 setIsQrScannerOpen(true)
-                                startQRCodeScanner()
+                                startQRCodeScanner() // Start the QR code scanner
                             }}
                             className="flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full w-16 h-16 hover:from-yellow-300 hover:to-orange-400 transition-all duration-300 text-white">
                             <QrCode size={32} />
@@ -228,20 +257,62 @@ export default function HomePage() {
                 </div>
             </nav>
 
+            {/* QR Code Generation Modal */}
+            {isQrModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-lg relative">
+                        <h2 className="text-lg font-bold mb-4">
+                            QR Code for {selectedFile?.title}
+                        </h2>
+                        <img
+                            src={qrCodeData}
+                            alt="QR Code"
+                            className="mx-auto mb-4"
+                        />
+                        <Button
+                            onClick={() => setIsQrModalOpen(false)}
+                            className="mt-4 w-full bg-blue-500 text-white py-2 rounded-lg">
+                            Close
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* QR Code Scanner Modal */}
             {isQrScannerOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg">
+                    <div className="bg-white p-6 rounded-lg shadow-lg relative">
                         <h2 className="text-lg font-bold mb-4">Scan QR Code</h2>
-                        <video ref={videoRef} className="w-full h-auto"></video>
+
+                        {/* Video Feed */}
+                        <video
+                            ref={videoRef}
+                            className="rounded-lg w-full"
+                            style={{ height: '320px' }}></video>
+
+                        {/* Scanning Frame */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-64 h-64 border-4 border-orange-500 rounded-lg relative">
+                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-orange-500"></div>
+                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-orange-500"></div>
+                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-orange-500"></div>
+                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-orange-500"></div>
+
+                                {/* Scanning Line */}
+                                <div className="absolute top-0 left-0 w-full h-1 bg-orange-500 animate-pulse"></div>
+                            </div>
+                        </div>
+
                         <canvas ref={canvasRef} className="hidden"></canvas>
-                        <p>{scannedData}</p>
+                        <p className="text-center mt-4 text-sm text-gray-600">
+                            {scannedData}
+                        </p>
                         <Button
                             onClick={() => {
                                 setIsQrScannerOpen(false)
-                                stopQRCodeScanner()
+                                stopQRCodeScanner() // Stop the scanner when modal is closed
                             }}
-                            className="mt-4">
+                            className="mt-4 w-full bg-orange-500 text-white py-2 rounded-lg">
                             Close Scanner
                         </Button>
                     </div>
