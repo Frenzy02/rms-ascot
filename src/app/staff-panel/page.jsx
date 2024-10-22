@@ -7,7 +7,8 @@ import { toast, ToastContainer } from 'react-toastify'
 import {
     appwriteConfig,
     signOut,
-    fetchUserFiles
+    fetchUserFiles, // Fetch only user-specific files
+    fetchAllFiles // Fetch all files for QR code scanning
 } from '@/services/api/appwrite'
 import { Client, Account } from 'appwrite'
 import { useRouter } from 'next/navigation'
@@ -15,6 +16,7 @@ import { QrCode, History, Bell, FileText, Folder } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
+import QRScanDialog from './components/qrScanDialog'
 
 const client = new Client()
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
@@ -22,6 +24,7 @@ const account = new Account(client)
 
 export default function HomePage() {
     const [files, setFiles] = useState([])
+    const [userFiles, setUserFiles] = useState([]) // Store user-specific files
     const [userId, setUserId] = useState(null)
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('mydocuments')
@@ -29,15 +32,18 @@ export default function HomePage() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
     const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
-    const [scannedData, setScannedData] = useState('No result') // State for scanned QR data
-    const [qrCodeData, setQrCodeData] = useState('') // State for QR code generation
-    const [selectedFile, setSelectedFile] = useState(null) // Track the selected file for QR generation
-    const [isQrModalOpen, setIsQrModalOpen] = useState(false) // Control QR generation modal visibility
-    const router = useRouter()
-
+    const [scannedData, setScannedData] = useState('No result')
+    const [qrCodeData, setQrCodeData] = useState('')
+    const [selectedFile, setSelectedFile] = useState(null)
+    const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+    const [scannedFile, setScannedFile] = useState(null)
+    const [isQrDialogOpen, setIsQrDialogOpen] = useState(false)
+    const [userFullName, setUserFullName] = useState('')
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
+    const router = useRouter()
 
+    // Fetch userId from session storage
     useEffect(() => {
         const storedUserId = sessionStorage.getItem('userId')
         if (storedUserId) {
@@ -47,14 +53,14 @@ export default function HomePage() {
         }
     }, [])
 
+    // Fetch user-specific files
     useEffect(() => {
         const getUserFiles = async () => {
+            if (!userId) return
             setLoading(true)
             try {
-                if (userId) {
-                    const fetchedFiles = await fetchUserFiles(userId)
-                    setFiles(fetchedFiles)
-                }
+                const fetchedUserFiles = await fetchUserFiles(userId) // Fetch only user-specific files
+                setUserFiles(fetchedUserFiles) // Set user's files in state
             } catch (err) {
                 console.error('Error fetching user files:', err)
             } finally {
@@ -62,12 +68,24 @@ export default function HomePage() {
             }
         }
 
-        if (userId) {
-            getUserFiles()
-        }
+        getUserFiles()
     }, [userId])
 
-    // QR Code Generation Modal logic
+    // Fetch all files for QR scanning
+    useEffect(() => {
+        const getAllFiles = async () => {
+            try {
+                const fetchedFiles = await fetchAllFiles() // Fetch all files for QR scanning
+                setFiles(fetchedFiles)
+            } catch (err) {
+                console.error('Error fetching all files:', err)
+            }
+        }
+
+        getAllFiles() // Fetch all files on component load
+    }, [])
+
+    // Generate QR Code for a file
     const generateQRCode = async (file) => {
         try {
             if (!file.controlNumber) {
@@ -84,26 +102,30 @@ export default function HomePage() {
         }
     }
 
+    // Handle file click to generate QR code
     const handleFileClick = (file) => {
-        console.log('File clicked:', file)
         if (file.controlNumber) {
             generateQRCode(file)
         } else {
-            console.warn('Control number is missing for the selected file.')
+            console.warn(
+                'Control number is missing for the selected file:',
+                file
+            )
+            toast.error('Control number is missing for the selected file.')
         }
     }
 
-    // QR Code Scanner logic
+    // Start QR Code Scanner
     const startQRCodeScanner = () => {
         navigator.mediaDevices
             .getUserMedia({ video: { facingMode: 'environment' } })
             .then((stream) => {
                 if (videoRef.current) {
                     videoRef.current.srcObject = stream
-                    videoRef.current.setAttribute('playsinline', true) // iOS compatibility
+                    videoRef.current.setAttribute('playsinline', true)
                     videoRef.current.play()
                     videoRef.current.onloadeddata = () => {
-                        scanQRCode() // Start scanning after the video is ready
+                        scanQRCode()
                     }
                 }
             })
@@ -115,10 +137,13 @@ export default function HomePage() {
             })
     }
 
+    // Scan QR Code and find the matching file
     const scanQRCode = () => {
         if (videoRef.current && canvasRef.current) {
             const canvas = canvasRef.current
-            const context = canvas.getContext('2d')
+            const context = canvas.getContext('2d', {
+                willReadFrequently: true
+            })
             canvas.height = videoRef.current.videoHeight
             canvas.width = videoRef.current.videoWidth
             context.drawImage(
@@ -128,6 +153,7 @@ export default function HomePage() {
                 canvas.width,
                 canvas.height
             )
+
             const imageData = context.getImageData(
                 0,
                 0,
@@ -137,25 +163,44 @@ export default function HomePage() {
             const code = jsQR(imageData.data, canvas.width, canvas.height)
 
             if (code) {
-                setScannedData(code.data) // Set the QR code result
-                setIsQrScannerOpen(false) // Close scanner after successful scan
-                toast.success(`QR Code Scanned: ${code.data}`)
-                stopQRCodeScanner() // Stop camera after scan
+                const scannedControlNumber = code.data.trim()
+                console.log('Scanned Control Number:', scannedControlNumber)
+
+                // Match the entire control number
+                const matchedFile = files.find((f) => {
+                    return (
+                        f.controlNumber.toLowerCase() ===
+                        scannedControlNumber.toLowerCase()
+                    )
+                })
+
+                if (matchedFile) {
+                    console.log('Matched File:', matchedFile)
+                    setScannedFile(matchedFile)
+                    setIsQrDialogOpen(true)
+                } else {
+                    toast.error('File not found.')
+                    setIsQrDialogOpen(false)
+                }
+                stopQRCodeScanner()
             } else {
-                requestAnimationFrame(scanQRCode) // Continue scanning
+                requestAnimationFrame(scanQRCode)
             }
         }
     }
 
+    // Stop QR Code Scanner
     const stopQRCodeScanner = () => {
         const tracks = videoRef.current?.srcObject?.getTracks()
         tracks?.forEach((track) => track.stop())
     }
 
+    // Handle logout click
     const handleLogoutClick = () => {
         setIsLogoutDialogOpen(true)
     }
 
+    // Confirm logout
     const handleLogoutConfirm = async () => {
         const response = await signOut()
         if (response.success) {
@@ -168,6 +213,7 @@ export default function HomePage() {
         setIsLogoutDialogOpen(false)
     }
 
+    // Cancel logout
     const handleLogoutCancel = () => {
         setIsLogoutDialogOpen(false)
     }
@@ -191,8 +237,8 @@ export default function HomePage() {
                         <p>Loading files...</p>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {files.length > 0 ? (
-                                files.map((file) => (
+                            {userFiles.length > 0 ? (
+                                userFiles.map((file) => (
                                     <Button
                                         key={file.id}
                                         onClick={() => handleFileClick(file)}
@@ -218,7 +264,6 @@ export default function HomePage() {
                 </ScrollArea>
             </div>
 
-            {/* Mobile Bottom Navigation */}
             <nav
                 className={`fixed bottom-0 w-full z-10 ${
                     isSidebarOpen ? '-translate-y-20' : ''
@@ -238,7 +283,7 @@ export default function HomePage() {
                         <button
                             onClick={() => {
                                 setIsQrScannerOpen(true)
-                                startQRCodeScanner() // Start the QR code scanner
+                                startQRCodeScanner()
                             }}
                             className="flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full w-16 h-16 hover:from-yellow-300 hover:to-orange-400 transition-all duration-300 text-white">
                             <QrCode size={32} />
@@ -278,44 +323,51 @@ export default function HomePage() {
                 </div>
             )}
 
+            {/* QR Code Dialog */}
+            {isQrDialogOpen && scannedFile && (
+                <QRScanDialog
+                    file={scannedFile} // Ensure this is the correct file
+                    userId={userId}
+                    userFullName={userFullName}
+                    onClose={() => setIsQrDialogOpen(false)}
+                />
+            )}
+
             {/* QR Code Scanner Modal */}
+
             {isQrScannerOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg relative">
-                        <h2 className="text-lg font-bold mb-4">Scan QR Code</h2>
-
-                        {/* Video Feed */}
+                    {/* Full-Screen Camera Video */}
+                    <div className="fixed inset-0 flex items-center justify-center">
                         <video
                             ref={videoRef}
-                            className="rounded-lg w-full"
-                            style={{ height: '320px' }}></video>
+                            className="w-full h-full object-cover"></video>
 
-                        {/* Scanning Frame */}
+                        {/* Scanning Frame Overlay */}
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="w-64 h-64 border-4 border-orange-500 rounded-lg relative">
                                 <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-orange-500"></div>
                                 <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-orange-500"></div>
                                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-orange-500"></div>
                                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-orange-500"></div>
-
-                                {/* Scanning Line */}
                                 <div className="absolute top-0 left-0 w-full h-1 bg-orange-500 animate-pulse"></div>
                             </div>
                         </div>
 
-                        <canvas ref={canvasRef} className="hidden"></canvas>
-                        <p className="text-center mt-4 text-sm text-gray-600">
-                            {scannedData}
-                        </p>
-                        <Button
-                            onClick={() => {
-                                setIsQrScannerOpen(false)
-                                stopQRCodeScanner() // Stop the scanner when modal is closed
-                            }}
-                            className="mt-4 w-full bg-orange-500 text-white py-2 rounded-lg">
-                            Close Scanner
-                        </Button>
+                        {/* Close Scanner Button */}
+                        <div className="absolute bottom-4 w-full flex justify-center">
+                            <Button
+                                onClick={() => {
+                                    setIsQrScannerOpen(false)
+                                    stopQRCodeScanner()
+                                }}
+                                className="bg-orange-500 text-white px-6 py-2 rounded-lg">
+                                Close Scanner
+                            </Button>
+                        </div>
                     </div>
+
+                    <canvas ref={canvasRef} className="hidden"></canvas>
                 </div>
             )}
 

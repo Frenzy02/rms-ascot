@@ -17,7 +17,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { X, Eye, EyeOff } from 'lucide-react'
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
-import { cardio } from 'ldrs'
 import { Account, Client } from 'appwrite'
 import {
     appwriteConfig,
@@ -25,9 +24,6 @@ import {
     signInUser,
     signUpUser
 } from '@/services/api/appwrite'
-
-// Register cardio animation
-cardio.register()
 
 // Initialize Appwrite Account
 const account = new Account(
@@ -48,6 +44,7 @@ export default function LogInSignUpModal({ onClose }) {
         email: '',
         password: '',
         confirmPassword: '',
+        department: '', // Added department field
         role: 'viewer'
     })
     const [loading, setLoading] = useState(false)
@@ -180,6 +177,10 @@ export default function LogInSignUpModal({ onClose }) {
                                             value={formData.email}
                                             onChange={handleInputChange}
                                         />
+                                        <DepartmentSelect
+                                            formData={formData}
+                                            setFormData={setFormData}
+                                        />
                                         <PasswordInput
                                             name="password"
                                             label="Password"
@@ -295,7 +296,7 @@ export default function LogInSignUpModal({ onClose }) {
                     width: 100%;
                     max-width: 350px;
                     height: 500px;
-                    perspective: 1000px; /* Gives the 3D effect */
+                    perspective: 1000px;
                     position: relative;
                 }
                 .flip-card-inner {
@@ -306,24 +307,24 @@ export default function LogInSignUpModal({ onClose }) {
                     transform-style: preserve-3d;
                 }
                 .flip-card.flipped .flip-card-inner {
-                    transform: rotateY(180deg); /* Rotate when flipped */
+                    transform: rotateY(180deg);
                 }
                 .flip-card-front,
                 .flip-card-back {
                     position: absolute;
                     width: 100%;
                     height: 100%;
-                    backface-visibility: hidden; /* Prevents seeing the back */
-                    overflow-y: auto; /* Ensure each side is scrollable */
-                    z-index: 1; /* Ensure cards stack properly */
+                    backface-visibility: hidden;
+                    overflow-y: auto;
+                    z-index: 1;
                 }
                 .flip-card-back {
                     transform: rotateY(180deg);
-                    z-index: 0; /* Ensure it stays behind initially */
+                    z-index: 0;
                 }
                 @media (max-width: 768px) {
                     .flip-card {
-                        max-width: 90%; /* Adjust for mobile screens */
+                        max-width: 90%;
                     }
                 }
             `}</style>
@@ -356,13 +357,15 @@ const InputField = ({
         {endAdornment}
     </div>
 )
+
+// Loading Spinner
 const LoadingSpinner = () => (
     <div className="flex items-center justify-center">
         <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-white"></div>
     </div>
 )
 
-// Reusable GenderSelect Component
+// GenderSelect Component
 const GenderSelect = ({ formData, setFormData }) => (
     <div>
         <Label className="text-gray-400">Gender</Label>
@@ -415,7 +418,30 @@ const GenderSelect = ({ formData, setFormData }) => (
         </div>
     </div>
 )
-// PasswordInput Component Definition
+
+// DepartmentSelect Component for Department Selection
+const DepartmentSelect = ({ formData, setFormData }) => (
+    <div className="relative">
+        <Label className="text-gray-400">Department</Label>
+        <select
+            name="department"
+            value={formData.department}
+            onChange={(e) =>
+                setFormData((prev) => ({ ...prev, department: e.target.value }))
+            }
+            className="mt-1 w-full bg-gray-700 text-white border border-gray-600 rounded-md">
+            <option value="">Select Department</option>
+            <option value="Information Technology">
+                Information Technology
+            </option>
+            <option value="Agriculture">Agriculture</option>
+            <option value="Education">Education</option>
+            <option value="Engineering">Engineering</option>
+        </select>
+    </div>
+)
+
+// PasswordInput Component
 const PasswordInput = ({
     name,
     label,

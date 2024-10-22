@@ -22,7 +22,9 @@ export const appwriteConfig = {
     subfoldersCollectionId:
         process.env.NEXT_PUBLIC_APPWRITE_SUBFOLDERS_COLLECTION_ID,
     uploadsfilesCollectionId:
-        process.env.NEXT_PUBLIC_APPWRITE_UPLOADSFILES_COLLECTION_ID
+        process.env.NEXT_PUBLIC_APPWRITE_UPLOADSFILES_COLLECTION_ID,
+    documentHistoryCollectionId:
+        process.env.NEXT_PUBLIC_APPWRITE_DOCUMENT_HISTORY_COLLECTION_ID
 }
 
 const client = new Client()
@@ -48,7 +50,8 @@ export const signUpUser = async (formData) => {
             lastname: formData.lastname,
             gender: formData.gender,
             email: user.email,
-            role: formData.role
+            role: formData.role,
+            department: formData.department
         }
 
         await databases.createDocument(
@@ -79,7 +82,6 @@ export const signUpUser = async (formData) => {
 }
 
 // User sign-in
-// User sign-in
 export const signInUser = async (email, password) => {
     try {
         const session = await account.createEmailPasswordSession(
@@ -101,6 +103,10 @@ export const signInUser = async (email, password) => {
         sessionStorage.setItem('username', userData.username || email)
         sessionStorage.setItem('email', email)
         sessionStorage.setItem('userId', userData.$id) // Ensure userId is stored
+        // Store user data in session storage when the user logs in
+        sessionStorage.setItem('firstName', userData.firstname)
+        sessionStorage.setItem('lastName', userData.lastname)
+
         console.log('User ID stored in session storage:', userData.$id) // Log the user ID
 
         return {
@@ -350,7 +356,6 @@ export const fetchRecords = async () => {
 // Fetch user files that have been approved
 export const fetchUserFiles = async (userId) => {
     try {
-        // Query to fetch files where userId matches and status is approved
         const response = await databases.listDocuments(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
@@ -361,22 +366,53 @@ export const fetchUserFiles = async (userId) => {
         )
 
         // Ensure that each file object contains the relevant metadata
-        const userFiles = response.documents.map((file) => ({
-            id: file.$id,
-            title: file.title || 'Untitled',
-            description: file.description || '',
-            fileType: file.fileType || 'Unknown',
-            size: file.size || '0 KB',
-            controlNumber: file.controlNumber || '',
-            createdAt: file.createdAt || new Date().toISOString(),
-
-            status: file.status || 'pending' // Add status to display if needed
-        }))
+        const userFiles = response.documents.map((file) => {
+            console.log(
+                `File ID: ${file.$id}, Control Number: ${file.controlNumber}`
+            )
+            return {
+                id: file.$id,
+                title: file.title || 'Untitled',
+                description: file.description || '',
+                fileType: file.fileType || 'Unknown',
+                size: file.size || '0 KB',
+                controlNumber: file.controlNumber || '',
+                createdAt: file.createdAt || new Date().toISOString(),
+                status: file.status || 'pending' // Add status to display if needed
+            }
+        })
 
         return userFiles
     } catch (error) {
         console.error('Error fetching user files:', error)
         throw new Error('Failed to fetch user files.')
+    }
+}
+
+export const fetchAllFiles = async () => {
+    try {
+        // Fetch all files in the collection without any filters
+        const response = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId
+        )
+
+        // Map the files and ensure controlNumber is included
+        const allFiles = response.documents.map((file) => ({
+            id: file.$id,
+            title: file.title || 'Untitled',
+            description: file.description || '',
+            fileType: file.fileType || 'Unknown',
+            size: file.size || '0 KB',
+            controlNumber: file.controlNumber || '', // Ensure controlNumber is mapped
+            createdAt: file.createdAt || new Date().toISOString(),
+            status: file.status || 'pending' // Include status if needed
+        }))
+
+        return allFiles
+    } catch (error) {
+        console.error('Error fetching all files:', error)
+        throw new Error('Failed to fetch files.')
     }
 }
 
@@ -426,43 +462,146 @@ export const uploadDocumentRequest = async (file, metadata) => {
 
 export const fetchDocumentRequests = async () => {
     try {
-        // Fetch all documents from the uploads files collection
+        // Fetch all document requests (remove status filter)
         const snapshot = await databases.listDocuments(
             appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId,
-            [Query.equal('status', 'pending')] // Adjust query for specific needs
+            appwriteConfig.uploadsfilesCollectionId // Fetch all document requests regardless of status
         )
-        console.log('Document Requests:', snapshot.documents) // Log the fetched requests
-        return snapshot.documents // Return the documents
+        console.log('Document Requests:', snapshot.documents)
+        return snapshot.documents // Return all document requests
     } catch (error) {
-        console.error('Error fetching document requests:', error) // Log any errors
-        throw new Error('Failed to fetch document requests.') // Re-throw for handling in the calling function
+        console.error('Error fetching document requests:', error)
+        throw new Error('Failed to fetch document requests.')
     }
 }
 
-export const handleDocumentRequest = async (requestId, action) => {
+export const addDocumentHistory = async ({
+    fileId,
+    previousHolder,
+    currentHolder,
+    department,
+    status
+}) => {
     try {
-        // Update the document based on action (approve or reject)
-        const updatedData = {
-            status: action === 'approve' ? 'approved' : 'rejected',
-            updatedAt: new Date().toISOString()
+        const response = await databases.createDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.documentHistoryCollectionId,
+            ID.unique(),
+            {
+                fileId,
+                previousHolder,
+                currentHolder,
+                department,
+                dateReceived: new Date().toISOString(),
+                status
+            },
+            [
+                Permission.read(Role.any()), // Allow any user to read the document
+                Permission.write(Role.any()), // Allow any user to write (update) the document
+                Permission.update(Role.any()), // Allow any user to update the document
+                Permission.delete(Role.any()) // Allow any user to delete the document
+            ]
+        )
+        return response
+    } catch (error) {
+        console.error('Failed to add document history:', error.message)
+        throw new Error('Failed to add document history.')
+    }
+}
+
+export const fetchDocumentHistory = async (fileId) => {
+    try {
+        console.log('Fetching history for fileId:', fileId) // Debugging log
+        const response = await databases.listDocuments(
+            appwriteConfig.databaseId, // Ensure this is correct
+            appwriteConfig.documentHistoryCollectionId, // Ensure this is correct
+            [Query.equal('fileId', fileId), Query.orderAsc('dateReceived')] // Query to find file history
+        )
+
+        if (response.documents.length === 0) {
+            throw new Error('No history found for this file.')
         }
 
-        // Update the request in the uploadsfilesCollectionId
+        console.log('History fetched:', response.documents) // Log the history for debugging
+        return response.documents
+    } catch (error) {
+        console.error('Error fetching document history:', error.message)
+        throw new Error('Failed to fetch document history.')
+    }
+}
+
+export const fetchFileMetadata = async (fileId) => {
+    try {
+        const response = await databases.getDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            fileId
+        )
+        return response
+    } catch (error) {
+        throw new Error('Failed to fetch file metadata')
+    }
+}
+
+export const updateHandleBy = async (fileId, newHolder) => {
+    try {
         const response = await databases.updateDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
-            requestId,
+            fileId,
+            {
+                handleBy: newHolder // Make sure you are passing the updated holder here
+            }
+        )
+        return response
+    } catch (error) {
+        console.error('Error updating currentHolder:', error.message)
+        throw error
+    }
+}
+
+export const handleDocumentRequest = async (documentId, action) => {
+    try {
+        // Fetch the document metadata using documentId
+        const document = await databases.getDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            documentId
+        )
+
+        if (!document) {
+            throw new Error(
+                'Document with the requested ID could not be found.'
+            )
+        }
+
+        // Prepare updated data based on action
+        const updatedData = {
+            status: action === 'approve' ? 'approved' : 'rejected',
+            approvedAt:
+                action === 'approve'
+                    ? new Date().toISOString()
+                    : document.approvedAt,
+            rejectedAt:
+                action === 'reject'
+                    ? new Date().toISOString()
+                    : document.rejectedAt
+        }
+
+        // Update the document metadata with the new status
+        const response = await databases.updateDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            documentId,
             updatedData
         )
 
-        // If approved, additional logic can be added to manage files
-        if (action === 'approve') {
-            // You can add logic here to manage the files after approval
-            // For example, moving them to another folder or changing permissions
-        } else {
-            // If rejected, you may want to delete the associated file from storage
-            await deleteFile(response.fileId) // Assuming response has a fileId field
+        // Optionally, delete the file from storage if rejected
+        if (action === 'reject') {
+            const deleteResponse = await deleteFile(document.fileId)
+            if (deleteResponse.success === false) {
+                console.warn(`File ${document.fileId} could not be deleted.`)
+            }
         }
 
         return response
@@ -472,13 +611,20 @@ export const handleDocumentRequest = async (requestId, action) => {
     }
 }
 
-// Function to delete a file from storage
-const deleteFile = async (fileId) => {
+export const deleteFile = async (fileId) => {
     try {
-        await storage.deleteFile(appwriteConfig.storageId, fileId)
+        const response = await storage.deleteFile(
+            appwriteConfig.storageId,
+            fileId
+        )
+        return response
     } catch (error) {
+        if (error.code === 404) {
+            console.warn(`File with ID ${fileId} not found. Skipping deletion.`)
+            return { success: false, message: 'File not found' }
+        }
         console.error('Error deleting file:', error)
-        throw new Error('Failed to delete file from storage.')
+        throw new Error('Failed to delete file.')
     }
 }
 

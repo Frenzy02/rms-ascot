@@ -1,141 +1,104 @@
-import { Button } from '@/components/ui/button'
+import React, { useState } from 'react'
 import {
-    Card,
-    CardHeader,
-    CardDescription,
-    CardTitle,
-    CardContent
-} from '@/components/ui/card'
-import { CalendarClockIcon, DownloadIcon } from '@/components/ui/icons'
-import { ResponsiveLine } from '@nivo/line'
+    BarChart,
+    Bar,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer
+} from 'recharts'
 
-export default function Component() {
-    return (
-        <section className="bg-neutral-900 text-white p-4 md:p-6">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold">
-                    Student Health Trends
-                </h2>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-8 gap-1">
-                        <CalendarClockIcon className="h-4 w-4 text-white" />
-                        <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                            Last 30 days
-                        </span>
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-8 gap-1">
-                        <DownloadIcon className="h-4 w-4 text-white" />
-                        <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                            Export
-                        </span>
-                    </Button>
-                </div>
-            </div>
-            <div className="grid gap-6">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Total Students with Illnesses</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-xl font-semibold">2,345</div>
-                        <div className="text-xs text-muted-foreground">
-                            Total students who got sick this month
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Health Trends</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="h-[400px] md:h-[500px]">
-                            {' '}
-                            {/* Adjust height to fit screen */}
-                            <LineChart />
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </section>
-    )
-}
+const data = [
+    { month: 'Jan', uploads: 60, downloads: 30, active: 105 },
+    { month: 'Feb', uploads: 55, downloads: 50, active: 100 },
+    { month: 'Mar', uploads: 80, downloads: 40, active: 130 },
+    { month: 'Apr', uploads: 81, downloads: 67, active: 130 },
+    { month: 'May', uploads: 60, downloads: 50, active: 120 },
+    { month: 'Jun', uploads: 70, downloads: 55, active: 110 },
+    { month: 'Jul', uploads: 50, downloads: 45, active: 95 }
+]
 
-function LineChart() {
+export default function DocumentsAnalytics() {
+    const [activeTab, setActiveTab] = useState('Overview')
+
     return (
-        <div className="h-full w-full">
-            <ResponsiveLine
-                data={[
-                    {
-                        id: 'Flu',
-                        data: [
-                            { x: 'Jan', y: 20 },
-                            { x: 'Feb', y: 30 },
-                            { x: 'Mar', y: 25 },
-                            { x: 'Apr', y: 35 },
-                            { x: 'May', y: 40 },
-                            { x: 'Jun', y: 45 }
-                        ]
-                    },
-                    {
-                        id: 'Cold',
-                        data: [
-                            { x: 'Jan', y: 15 },
-                            { x: 'Feb', y: 20 },
-                            { x: 'Mar', y: 18 },
-                            { x: 'Apr', y: 25 },
-                            { x: 'May', y: 30 },
-                            { x: 'Jun', y: 20 }
-                        ]
-                    },
-                    {
-                        id: 'Allergies',
-                        data: [
-                            { x: 'Jan', y: 10 },
-                            { x: 'Feb', y: 12 },
-                            { x: 'Mar', y: 15 },
-                            { x: 'Apr', y: 20 },
-                            { x: 'May', y: 25 },
-                            { x: 'Jun', y: 30 }
-                        ]
-                    }
-                ]}
-                margin={{ top: 10, right: 10, bottom: 40, left: 40 }}
-                xScale={{ type: 'point' }}
-                yScale={{ type: 'linear', min: 0, max: 'auto' }}
-                axisTop={null}
-                axisRight={null}
-                axisBottom={{
-                    tickSize: 0,
-                    tickPadding: 16
-                }}
-                axisLeft={{
-                    tickSize: 0,
-                    tickValues: 5,
-                    tickPadding: 16
-                }}
-                colors={['#2563eb', '#e11d48', '#34d399']}
-                pointSize={6}
-                useMesh={true}
-                gridYValues={6}
-                theme={{
-                    tooltip: {
-                        chip: {
-                            borderRadius: '9999px'
-                        },
-                        container: {
-                            fontSize: '12px',
-                            textTransform: 'capitalize',
-                            borderRadius: '6px'
-                        }
-                    },
-                    grid: {
-                        line: {
-                            stroke: '#f3f4f6'
-                        }
-                    }
-                }}
-                role="application"
-            />
+        <div className="min-h-screen bg-gray-100 p-8">
+            {/* Header */}
+            <div className="bg-white p-6 rounded-lg shadow-lg mb-4">
+                <h1 className="text-3xl font-bold">Document Analytics</h1>
+                <p className="text-gray-600">
+                    Insights into your document management system
+                </p>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex space-x-4 mb-6">
+                {['Overview', 'Uploads', 'File Types'].map((tab) => (
+                    <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`p-2 rounded-lg ${
+                            activeTab === tab ? 'bg-gray-300' : 'bg-gray-200'
+                        } font-semibold`}>
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+                {activeTab === 'Overview' && (
+                    <ResponsiveContainer width="100%" height={400}>
+                        <LineChart data={data}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="month" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Line
+                                type="monotone"
+                                dataKey="uploads"
+                                stroke="#00C49F"
+                                activeDot={{ r: 8 }}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="downloads"
+                                stroke="#FF8042"
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="active"
+                                stroke="#0088FE"
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+
+                {activeTab === 'Uploads' && (
+                    <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={data}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="month" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="uploads" fill="#00C49F" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                )}
+
+                {activeTab === 'File Types' && (
+                    <div>
+                        {/* You can add another graph or table for file types */}
+                        <p>File Types Analytics Coming Soon!</p>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
