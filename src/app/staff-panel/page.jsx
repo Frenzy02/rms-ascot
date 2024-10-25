@@ -16,7 +16,7 @@ import { QrCode, History, Bell, FileText, Folder } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
-import QRScanDialog from './components/qrScanDialog'
+import QRScanDialog from './components/QRScanDialog'
 
 const client = new Client()
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
@@ -24,7 +24,7 @@ const account = new Account(client)
 
 export default function HomePage() {
     const [files, setFiles] = useState([])
-    const [userFiles, setUserFiles] = useState([]) // Store user-specific files
+    const [userFiles, setUserFiles] = useState([])
     const [userId, setUserId] = useState(null)
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('mydocuments')
@@ -42,6 +42,8 @@ export default function HomePage() {
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
     const router = useRouter()
+    const [searchTerm, setSearchTerm] = useState('') // Manage search input
+    const [searchSuggestions, setSearchSuggestions] = useState([]) // For search suggestions
 
     // Fetch userId from session storage
     useEffect(() => {
@@ -59,30 +61,68 @@ export default function HomePage() {
             if (!userId) return
             setLoading(true)
             try {
-                const fetchedUserFiles = await fetchUserFiles(userId) // Fetch only user-specific files
-                setUserFiles(fetchedUserFiles) // Set user's files in state
+                const fetchedUserFiles = await fetchUserFiles(userId)
+                setUserFiles(fetchedUserFiles)
             } catch (err) {
                 console.error('Error fetching user files:', err)
             } finally {
                 setLoading(false)
             }
         }
-
         getUserFiles()
     }, [userId])
 
-    // Fetch all files for QR scanning
+    // Fetch all files for "Search Documents" tab
     useEffect(() => {
         const getAllFiles = async () => {
             try {
-                const fetchedFiles = await fetchAllFiles() // Fetch all files for QR scanning
+                const fetchedFiles = await fetchAllFiles()
                 setFiles(fetchedFiles)
             } catch (err) {
                 console.error('Error fetching all files:', err)
             }
         }
 
-        getAllFiles() // Fetch all files on component load
+        getAllFiles()
+    }, [])
+
+    // Filter logic for My Documents
+    const filteredUserFiles = searchTerm
+        ? userFiles.filter((file) =>
+              file.title.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : userFiles
+
+    // Search Suggestions in "Search Documents" tab
+    const handleSearchDocuments = (e) => {
+        const searchValue = e.target.value.toLowerCase()
+        setSearchTerm(searchValue)
+
+        if (searchValue === '') {
+            setSearchSuggestions([])
+            return
+        }
+
+        const suggestions = files.filter(
+            (file) =>
+                file.title.toLowerCase().includes(searchValue) ||
+                file.description.toLowerCase().includes(searchValue)
+        )
+        setSearchSuggestions(suggestions)
+    }
+
+    // Fetch all files for QR scanning
+    useEffect(() => {
+        const getAllFiles = async () => {
+            try {
+                const fetchedFiles = await fetchAllFiles()
+                setFiles(fetchedFiles)
+            } catch (err) {
+                console.error('Error fetching all files:', err)
+            }
+        }
+
+        getAllFiles()
     }, [])
 
     // Generate QR Code for a file
@@ -114,6 +154,20 @@ export default function HomePage() {
             toast.error('Control number is missing for the selected file.')
         }
     }
+
+    // Fetch all files for QR scanning
+    useEffect(() => {
+        const getAllFiles = async () => {
+            try {
+                const fetchedFiles = await fetchAllFiles() // Fetch all files for QR scanning
+                setFiles(fetchedFiles)
+            } catch (err) {
+                console.error('Error fetching all files:', err)
+            }
+        }
+
+        getAllFiles() // Fetch all files on component load
+    }, [])
 
     // Start QR Code Scanner
     const startQRCodeScanner = () => {
@@ -198,7 +252,7 @@ export default function HomePage() {
     // Handle logout click
     const handleLogoutClick = () => {
         setIsLogoutDialogOpen(true)
-    }
+    } // Handle file click to generate QR code
 
     // Confirm logout
     const handleLogoutConfirm = async () => {
@@ -218,6 +272,13 @@ export default function HomePage() {
         setIsLogoutDialogOpen(false)
     }
 
+    // Search documents
+    const filteredFiles = searchTerm
+        ? userFiles.filter((file) =>
+              file.title.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : userFiles
+
     return (
         <div className="flex h-screen bg-white">
             <Sidebar
@@ -228,21 +289,61 @@ export default function HomePage() {
             />
 
             <div className="flex-1 flex flex-col">
-                <Header />
+                {/* Pass selectedItem to Header to update search bar placeholder */}
+                <Header
+                    searchTerm={searchTerm}
+                    setSearchTerm={
+                        selectedItem === 'Search Documents'
+                            ? handleSearchDocuments
+                            : (e) => setSearchTerm(e.target.value)
+                    }
+                    selectedItem={selectedItem} // To update search bar behavior
+                />
+
                 <ScrollArea className="flex-1 p-6 pb-20">
                     <h2 className="text-2xl font-bold mb-4 text-gray-800">
-                        My Drive
+                        {selectedItem === 'Search Documents'
+                            ? 'Search Documents'
+                            : 'My Drive'}
                     </h2>
-                    {loading ? (
-                        <p>Loading files...</p>
+
+                    {/* Render Content Based on Active Tab */}
+                    {selectedItem === 'Search Documents' ? (
+                        <>
+                            {/* Search Suggestions */}
+                            {searchSuggestions.length > 0 ? (
+                                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-20 mt-2 max-h-60 overflow-auto">
+                                    {searchSuggestions.map((suggestion) => (
+                                        <div
+                                            key={suggestion.id}
+                                            onClick={() =>
+                                                handleFileClick(suggestion)
+                                            }
+                                            className="cursor-pointer px-4 py-2 hover:bg-gray-100">
+                                            <p className="font-medium text-gray-700">
+                                                {suggestion.title}
+                                            </p>
+                                            <p className="text-sm text-gray-500">
+                                                {suggestion.description}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500">
+                                    Start typing to search in uploaded files.
+                                </p>
+                            )}
+                        </>
                     ) : (
+                        // Render "My Documents" tab files
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {userFiles.length > 0 ? (
-                                userFiles.map((file) => (
+                            {filteredUserFiles.length > 0 ? (
+                                filteredUserFiles.map((file) => (
                                     <Button
                                         key={file.id}
-                                        onClick={() => handleFileClick(file)}
                                         variant="outline"
+                                        onClick={() => handleFileClick(file)}
                                         className="h-32 flex flex-col items-center justify-center text-center p-4 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 bg-blue-500 text-white">
                                         <div className="bg-white p-2 rounded-full mb-2">
                                             {file.fileType === 'folder' ? (
@@ -264,44 +365,6 @@ export default function HomePage() {
                 </ScrollArea>
             </div>
 
-            <nav
-                className={`fixed bottom-0 w-full z-10 ${
-                    isSidebarOpen ? '-translate-y-20' : ''
-                } transition-transform duration-300 lg:hidden`}>
-                <div className="relative flex justify-around items-center h-20 bg-black/50 backdrop-blur-lg rounded-t-3xl shadow-lg px-4">
-                    <button
-                        onClick={() => setActiveTab('history')}
-                        className={`flex flex-col items-center ${
-                            activeTab === 'history'
-                                ? 'text-white'
-                                : 'text-gray-400'
-                        } transition-colors duration-200`}>
-                        <History size={24} />
-                        <span className="text-xs mt-1">History</span>
-                    </button>
-                    <div className="absolute -top-10 p-4 rounded-full shadow-lg transform translate-y-2">
-                        <button
-                            onClick={() => {
-                                setIsQrScannerOpen(true)
-                                startQRCodeScanner()
-                            }}
-                            className="flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full w-16 h-16 hover:from-yellow-300 hover:to-orange-400 transition-all duration-300 text-white">
-                            <QrCode size={32} />
-                        </button>
-                    </div>
-                    <button
-                        onClick={() => setActiveTab('notifications')}
-                        className={`flex flex-col items-center ${
-                            activeTab === 'notifications'
-                                ? 'text-white'
-                                : 'text-gray-400'
-                        } transition-colors duration-200`}>
-                        <Bell size={24} />
-                        <span className="text-xs mt-1">Notifications</span>
-                    </button>
-                </div>
-            </nav>
-
             {/* QR Code Generation Modal */}
             {isQrModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -322,28 +385,50 @@ export default function HomePage() {
                     </div>
                 </div>
             )}
+            {/* Bottom Navigation */}
+            <nav className="fixed bottom-0 w-full z-10 bg-black/50 backdrop-blur-lg rounded-t-3xl shadow-lg px-4">
+                <div className="relative flex justify-around items-center h-20">
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className="flex flex-col items-center text-gray-400 transition-colors duration-200">
+                        <History size={24} />
+                        <span className="text-xs mt-1">History</span>
+                    </button>
+                    <div className="absolute -top-10 p-4 rounded-full shadow-lg transform translate-y-2">
+                        <button
+                            onClick={() => {
+                                setIsQrScannerOpen(true)
+                                startQRCodeScanner()
+                            }}
+                            className="flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full w-16 h-16 hover:from-yellow-300 hover:to-orange-400 transition-all duration-300 text-white">
+                            <QrCode size={32} />
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => setActiveTab('notifications')}
+                        className="flex flex-col items-center text-gray-400 transition-colors duration-200">
+                        <Bell size={24} />
+                        <span className="text-xs mt-1">Notifications</span>
+                    </button>
+                </div>
+            </nav>
 
             {/* QR Code Dialog */}
             {isQrDialogOpen && scannedFile && (
                 <QRScanDialog
-                    file={scannedFile} // Ensure this is the correct file
+                    file={scannedFile}
                     userId={userId}
-                    userFullName={userFullName}
                     onClose={() => setIsQrDialogOpen(false)}
                 />
             )}
 
             {/* QR Code Scanner Modal */}
-
             {isQrScannerOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    {/* Full-Screen Camera Video */}
                     <div className="fixed inset-0 flex items-center justify-center">
                         <video
                             ref={videoRef}
                             className="w-full h-full object-cover"></video>
-
-                        {/* Scanning Frame Overlay */}
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="w-64 h-64 border-4 border-orange-500 rounded-lg relative">
                                 <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-orange-500"></div>
@@ -353,8 +438,6 @@ export default function HomePage() {
                                 <div className="absolute top-0 left-0 w-full h-1 bg-orange-500 animate-pulse"></div>
                             </div>
                         </div>
-
-                        {/* Close Scanner Button */}
                         <div className="absolute bottom-4 w-full flex justify-center">
                             <Button
                                 onClick={() => {
@@ -366,7 +449,6 @@ export default function HomePage() {
                             </Button>
                         </div>
                     </div>
-
                     <canvas ref={canvasRef} className="hidden"></canvas>
                 </div>
             )}

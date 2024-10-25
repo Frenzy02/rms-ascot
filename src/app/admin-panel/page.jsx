@@ -17,6 +17,7 @@ import DocumentsRecords from '../admin-panel/documents-records/page'
 import DocumentRequest from './document-request/page'
 import Users from '../admin-panel/users/page'
 import Analytics from '../admin-panel/analytics/page'
+import ActivityLog from './activity-log/page' // Import the Activity Log component
 import {
     AlertDialog,
     AlertDialogAction,
@@ -96,6 +97,8 @@ const AdminPanel = () => {
                 return <Users />
             case 'analytics':
                 return <Analytics />
+            case 'activity-log': // Add the Activity Log here
+                return <ActivityLog />
             default:
                 return <Dashboard />
         }
@@ -152,6 +155,14 @@ const AdminPanel = () => {
                     <SidebarLink
                         link={{
                             href: '#',
+                            label: 'Activity Log',
+                            icon: <IconFileText />
+                        }}
+                        onClick={() => setActiveComponent('activity-log')}
+                    />
+                    <SidebarLink
+                        link={{
+                            href: '#',
                             label: 'Log Out',
                             icon: <IconLogout />
                         }}
@@ -162,7 +173,7 @@ const AdminPanel = () => {
 
             <div
                 className={`flex-grow p-4 transition-all duration-300 ${
-                    sidebarOpen ? 'ml-[300px]' : 'ml-[70px]'
+                    sidebarOpen ? 'ml-[300px]' : 'ml-[50px]'
                 }`}>
                 <div>{renderContent()}</div>
             </div>

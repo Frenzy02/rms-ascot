@@ -9,7 +9,8 @@ import {
     Menu,
     X,
     FileText,
-    Settings
+    Settings,
+    Search
 } from 'lucide-react'
 import ModalContent from './ui/ModalContent'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -38,6 +39,11 @@ export default function Sidebar({ selectedItem, setSelectedItem, onLogout }) {
             name: 'My Documents',
             icon: <Home className="w-5 h-5" />,
             color: 'from-blue-500 to-cyan-500'
+        },
+        {
+            name: 'Search Documents',
+            icon: <Search className="w-5 h-5" />,
+            color: 'from-green-500 to-teal-500'
         }
     ]
 

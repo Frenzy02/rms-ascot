@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { X, Upload, FileUp } from 'lucide-react'
-import { toast } from 'react-toastify' // Import toast from react-toastify
-import 'react-toastify/dist/ReactToastify.css' // Import the toast styles
+import { toast } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import {
     uploadDocumentRequest,
     fetchFoldersAndFiles
@@ -17,7 +17,6 @@ export default function ModalContent({ onClose }) {
     const [folderId, setFolderId] = useState('')
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
-    const [handleBy, setHandleBy] = useState('')
     const [fileType, setFileType] = useState('')
     const [file, setFile] = useState(null)
     const [userId, setUserId] = useState('')
@@ -60,7 +59,7 @@ export default function ModalContent({ onClose }) {
             const response = await uploadDocumentRequest(file, {
                 title,
                 description,
-                handleBy,
+                handleBy: userId, // Use userId from session as handleBy
                 userId,
                 folderId,
                 fileType,
@@ -83,7 +82,6 @@ export default function ModalContent({ onClose }) {
                 // Reset fields
                 setTitle('')
                 setDescription('')
-                setHandleBy('')
                 setFile(null)
                 setFolderId('')
                 setFileType('')
@@ -123,7 +121,6 @@ export default function ModalContent({ onClose }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl relative max-w-md w-full mx-auto overflow-hidden">
                 <div className="p-6 space-y-4 overflow-y-auto max-h-[90vh] sm:max-h-[80vh]">
-                    {/* Scrollable area */}
                     <div className="flex justify-between items-center bg-purple-600 -mx-6 -mt-6 px-6 py-4 mb-4">
                         <h2 className="text-2xl font-bold text-white">
                             Upload Document
@@ -153,15 +150,6 @@ export default function ModalContent({ onClose }) {
                         placeholder="Enter document description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                    />
-                    <Label htmlFor="handleBy" className="text-green-600">
-                        Handled By
-                    </Label>
-                    <Input
-                        id="handleBy"
-                        placeholder="Enter handler's name"
-                        value={handleBy}
-                        onChange={(e) => setHandleBy(e.target.value)}
                     />
                     <Label htmlFor="fileType" className="text-red-600">
                         File Type

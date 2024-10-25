@@ -24,7 +24,9 @@ export const appwriteConfig = {
     uploadsfilesCollectionId:
         process.env.NEXT_PUBLIC_APPWRITE_UPLOADSFILES_COLLECTION_ID,
     documentHistoryCollectionId:
-        process.env.NEXT_PUBLIC_APPWRITE_DOCUMENT_HISTORY_COLLECTION_ID
+        process.env.NEXT_PUBLIC_APPWRITE_DOCUMENT_HISTORY_COLLECTION_ID,
+    fileViewsCollectionId:
+        process.env.NEXT_PUBLIC_APPWRITE_FILEVIEWS_COLLECTION_ID
 }
 
 const client = new Client()
@@ -106,6 +108,7 @@ export const signInUser = async (email, password) => {
         // Store user data in session storage when the user logs in
         sessionStorage.setItem('firstName', userData.firstname)
         sessionStorage.setItem('lastName', userData.lastname)
+        sessionStorage.setItem('department', userData.department)
 
         console.log('User ID stored in session storage:', userData.$id) // Log the user ID
 
@@ -127,13 +130,15 @@ export const signInUser = async (email, password) => {
 }
 
 // Function to upload a file and create a file document in the database
+// Function to upload a file and create a file document in the database
 export const uploadFile = async (
     file,
     folderId,
     fileTitle,
     fileDescription,
     fileHandleBy,
-    fileType
+    fileType,
+    userId // Ensure userId is passed here
 ) => {
     try {
         // Step 1: Upload the file to Appwrite storage
@@ -142,7 +147,7 @@ export const uploadFile = async (
             ID.unique(),
             file,
             [
-                Permission.read(Role.users()),
+                Permission.read(Role.any()), // Allows anyone to read (optional)
                 Permission.update(Role.users()),
                 Permission.delete(Role.users()),
                 Permission.write(Role.users())
@@ -389,18 +394,20 @@ export const fetchUserFiles = async (userId) => {
     }
 }
 
+// Fetch all files from the uploads files collection
 export const fetchAllFiles = async () => {
     try {
         // Fetch all files in the collection without any filters
         const response = await databases.listDocuments(
             appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId
+            appwriteConfig.uploadsfilesCollectionId // Replace with your actual uploads files collection ID
         )
 
         // Map the files and ensure controlNumber is included
         const allFiles = response.documents.map((file) => ({
             id: file.$id,
             title: file.title || 'Untitled',
+            fileId: file.fileId || file.$id, // Ensure fileId is included
             description: file.description || '',
             fileType: file.fileType || 'Unknown',
             size: file.size || '0 KB',
@@ -424,7 +431,7 @@ export const uploadDocumentRequest = async (file, metadata) => {
             appwriteConfig.storageId,
             ID.unique(),
             file,
-            [Permission.read(Role.users()), Permission.write(Role.users())]
+            [Permission.read(Role.any()), Permission.write(Role.users())]
         )
 
         if (!uploadedFile.$id) {
@@ -625,6 +632,173 @@ export const deleteFile = async (fileId) => {
         }
         console.error('Error deleting file:', error)
         throw new Error('Failed to delete file.')
+    }
+}
+
+export const logFileView = async (fileId, userId, department) => {
+    try {
+        const response = await databases.createDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.fileViewsCollectionId, // Collection for file views
+            ID.unique(),
+            {
+                fileId: fileId,
+                userId: userId,
+                department: department, // Ensure department is passed correctly
+                viewTime: new Date().toISOString() // Log the time of the view
+            }
+        )
+        return response
+    } catch (error) {
+        console.error('Error logging file view:', error.message)
+        throw new Error('Failed to log file view.')
+    }
+}
+
+export const getFilePreview = async (
+    fileId,
+    width = 800,
+    height = 1200,
+    gravity = 'center',
+    quality = 100,
+    borderWidth = 0,
+    borderColor = '#000000',
+    borderRadius = 0,
+    opacity = 100,
+    rotation = 0,
+    background = '',
+    format = 'jpg' // Change to 'pdf' if previewing PDFs
+) => {
+    try {
+        console.log('Fetching file preview with the following parameters:')
+        console.log(`File ID: ${fileId}`)
+        console.log(`Width: ${width}, Height: ${height}`)
+        console.log(`Gravity: ${gravity}, Quality: ${quality}`)
+        console.log(`Border: ${borderWidth}px ${borderColor}`)
+        console.log(`Border Radius: ${borderRadius}, Opacity: ${opacity}`)
+        console.log(`Rotation: ${rotation}, Background: ${background}`)
+        console.log(`Format: ${format}`)
+
+        const result = await storage.getFilePreview(
+            appwriteConfig.storageId, // Your storage ID
+            fileId,
+            width,
+            height,
+            gravity,
+            quality,
+            borderWidth,
+            borderColor,
+            borderRadius,
+            opacity,
+            rotation,
+            background,
+            format
+        )
+
+        console.log('File preview fetched successfully:', result)
+        return result // Return the file preview URL
+    } catch (error) {
+        console.error('Error fetching file preview:', error)
+        throw new Error('Failed to fetch file preview.')
+    }
+}
+
+export const fetchFilesWithViews = async () => {
+    try {
+        // Fetch all files from the uploads files collection
+        const filesResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId
+        )
+
+        const files = filesResponse.documents.map((file) => ({
+            fileId: file.$id,
+            title: file.title || 'Untitled',
+            description: file.description || '',
+            fileType: file.fileType || 'Unknown',
+            size: file.size || '0 KB',
+            createdAt: file.createdAt || new Date().toISOString(),
+            views: 0,
+            viewers: []
+        }))
+
+        // For each file, fetch its views from the fileviews collection
+        for (const file of files) {
+            const viewsResponse = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.fileViewsCollectionId,
+                [Query.equal('fileId', file.fileId)]
+            )
+
+            file.views = viewsResponse.documents.length // Number of views
+
+            // Fetch viewer details
+            file.viewers = await Promise.all(
+                viewsResponse.documents.map(async (view) => {
+                    if (!view.userId) {
+                        console.warn(
+                            `Missing userId for view on fileId: ${file.fileId}`
+                        )
+                        return null // Skip this viewer if userId is missing
+                    }
+
+                    try {
+                        const userResponse = await databases.getDocument(
+                            appwriteConfig.databaseId,
+                            appwriteConfig.userCollectionId,
+                            view.userId
+                        )
+
+                        // Log to confirm the presence of department field
+                        console.log('Viewer Department:', view.department)
+                        console.log('User Data:', userResponse)
+
+                        return {
+                            userId: view.userId,
+                            firstName: userResponse.firstname || 'Unknown',
+                            lastName: userResponse.lastname || 'User',
+                            department:
+                                view.department ||
+                                userResponse.department ||
+                                'N/A', // Check view first, then user
+                            viewTime: view.viewTime
+                        }
+                    } catch (userError) {
+                        console.error(
+                            `Error fetching user data for userId ${view.userId}:`,
+                            userError
+                        )
+                        return null // Skip this viewer if fetching fails
+                    }
+                })
+            )
+
+            // Remove null entries from viewers list
+            file.viewers = file.viewers.filter((viewer) => viewer !== null)
+        }
+
+        return files
+    } catch (error) {
+        console.error('Error fetching files with views:', error)
+        throw new Error('Failed to fetch files with views.')
+    }
+}
+
+export const getFileView = async (bucketId, fileId) => {
+    try {
+        const response = await storage.getFileView(bucketId, fileId)
+
+        console.log('File view response:', response) // Log the complete response
+
+        // Ensure the response has the href property
+        if (response && response.href) {
+            return response.href // Return the view URL
+        } else {
+            throw new Error('Failed to fetch file view URL.')
+        }
+    } catch (error) {
+        console.error('Error fetching file view:', error)
+        throw new Error('Failed to fetch file view.')
     }
 }
 

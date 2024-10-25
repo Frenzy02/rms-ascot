@@ -29,15 +29,13 @@ import { appwriteConfig, signOut, fetchAllFiles } from '@/services/api/appwrite'
 import jsQR from 'jsqr'
 import QRScanDialog from './components/QRScanDialog' // Include the QRScanDialog component
 import { Spinner } from './components/Spinner' // Import a Spinner for loading
+import FileOptionsModal from './components/FileOptionModal'
+
 const client = new Client()
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
 const account = new Account(client)
 
 export default function ViewerPanel() {
-    const [searchTerm, setSearchTerm] = useState('')
-    const [currentPath, setCurrentPath] = useState([]) // Removed back button dependency
-    const [selectedFile, setSelectedFile] = useState(null)
-    const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [showQRCode, setShowQRCode] = useState(false)
     const [qrValue, setQRValue] = useState('')
     const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -46,15 +44,19 @@ export default function ViewerPanel() {
     const [isQrDialogOpen, setIsQrDialogOpen] = useState(false)
     const [scannedData, setScannedData] = useState('No result')
     const [userId, setUserId] = useState(null) // Add userId state
-    const [searchSuggestions, setSearchSuggestions] = useState([])
     const videoRef = useRef(null)
     const canvasRef = useRef(null)
+    const [filteredFiles, setFilteredFiles] = useState([]) // Filtered search results
+    const [searchTerm, setSearchTerm] = useState('')
+    const [currentPath, setCurrentPath] = useState([]) // Removed back button dependency
+    const [selectedFile, setSelectedFile] = useState(null) // Track selected file
+    const [isLoggedIn, setIsLoggedIn] = useState(false)
+    const [isModalOpen, setIsModalOpen] = useState(false) // Add this line
+    const [searchSuggestions, setSearchSuggestions] = useState([])
+    const [currentFiles, setCurrentFiles] = useState([]) // Holds all files
     const router = useRouter()
     const clearAuthUser = useAuthUserStore((state) => state.clearAuthUser)
     const [isLoading, setIsLoading] = useState(false) // Loading state for search
-    const [filteredFiles, setFilteredFiles] = useState([]) // Filtered search results
-
-    const [currentFiles, setCurrentFiles] = useState([])
 
     // Fetch userId from session storage
     useEffect(() => {
@@ -100,6 +102,7 @@ export default function ViewerPanel() {
         getAllFiles() // Fetch all files on component load
     }, [])
 
+    // Handle search input
     const handleSearch = (e) => {
         setSearchTerm(e.target.value)
         const lowerSearchTerm = e.target.value.toLowerCase()
@@ -117,26 +120,23 @@ export default function ViewerPanel() {
         setSearchSuggestions(suggestions)
     }
 
+    // When user clicks on a suggestion
     const handleSuggestionClick = (suggestion) => {
         setSearchTerm(suggestion.title)
-        setSelectedFile(suggestion)
-        setSearchSuggestions([])
+        setSelectedFile(suggestion) // Set only the selected file to display
+        setSearchSuggestions([]) // Hide suggestions after selection
     }
 
+    // Only display the selected file
     const handleItemClick = (item) => {
-        if (item.type === 'folder') {
-            setCurrentPath([...currentPath, item])
+        if (item.fileId) {
+            console.log('Item clicked:', item) // Debugging: Ensure fileId is logged
+            setSelectedFile(item) // Store selected file with fileId
+            setIsModalOpen(true) // Open modal if fileId is available
         } else {
-            setSelectedFile(item)
-            const fileInfo = JSON.stringify({
-                id: item.id,
-                name: item.name,
-                content: item.content
-            })
-            const encodedFileInfo = encodeURIComponent(fileInfo)
-            const url = `https://example.com/view-file?data=${encodedFileInfo}`
-            setQRValue(url)
-            setShowQRCode(true)
+            console.error('File ID is missing for selected file:', item)
+            // Optionally display an error or prevent modal from opening
+            toast.error('File data is incomplete. Cannot view the file.')
         }
     }
 
@@ -251,8 +251,10 @@ export default function ViewerPanel() {
                     className="w-1/2 opacity-10"
                 />
             </div>
+
+            {/* Display selected file if it exists */}
             <div className="relative z-10 flex items-center justify-between mb-4">
-                <div className="flex items-center flex-grow mr-4 relative">
+                <div className="relative flex items-center flex-grow mr-4">
                     <Input
                         type="text"
                         placeholder="Search document by title or description..."
@@ -262,22 +264,24 @@ export default function ViewerPanel() {
                     />
                     <Search className="w-5 h-5 text-gray-500" />
                     {searchSuggestions.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-20 mt-2 max-h-60 overflow-auto">
-                            {searchSuggestions.map((suggestion) => (
-                                <div
-                                    key={suggestion.id}
-                                    onClick={() =>
-                                        handleSuggestionClick(suggestion)
-                                    }
-                                    className="cursor-pointer px-4 py-2 hover:bg-gray-100">
-                                    <p className="font-medium text-gray-700">
-                                        {suggestion.title}
-                                    </p>
-                                    <p className="text-sm text-gray-500">
-                                        {suggestion.description}
-                                    </p>
-                                </div>
-                            ))}
+                        <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-50 mt-2 max-h-60 overflow-auto">
+                            <ScrollArea className="max-h-60">
+                                {searchSuggestions.map((suggestion) => (
+                                    <div
+                                        key={suggestion.id}
+                                        onClick={() =>
+                                            handleSuggestionClick(suggestion)
+                                        }
+                                        className="cursor-pointer px-4 py-2 hover:bg-gray-100">
+                                        <p className="font-medium text-gray-700">
+                                            {suggestion.title}
+                                        </p>
+                                        <p className="text-sm text-gray-500">
+                                            {suggestion.description}
+                                        </p>
+                                    </div>
+                                ))}
+                            </ScrollArea>
                         </div>
                     )}
                 </div>
@@ -290,38 +294,47 @@ export default function ViewerPanel() {
                 </Button>
             </div>
 
-            {searchSuggestions.length === 0 && (
-                <ScrollArea className="relative z-10 flex-grow mb-4 bg-white bg-opacity-50 rounded-lg shadow-lg p-6">
-                    {isLoading ? (
-                        <div className="flex justify-center items-center">
-                            <Spinner />
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {selectedFile ? (
-                                <Button
-                                    key={selectedFile.id}
-                                    variant="outline"
-                                    className="h-32 flex flex-col items-center justify-center text-center p-4 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition duration-300"
-                                    onClick={() => {}}>
-                                    {selectedFile.type === 'folder' ? (
-                                        <Folder className="w-16 h-16 mb-3 text-white" />
-                                    ) : (
-                                        <File className="w-16 h-16 mb-3 text-white" />
-                                    )}
-                                    <span className="text-lg font-semibold truncate w-full">
-                                        {selectedFile.title}
-                                    </span>
-                                </Button>
-                            ) : (
-                                <p className="text-gray-500 text-center col-span-4">
-                                    Search for a file to display here.
-                                </p>
-                            )}
-                        </div>
-                    )}
-                </ScrollArea>
-            )}
+            {/* Update the z-index for the ScrollArea to be lower */}
+            <ScrollArea className="relative z-0 flex-grow mb-4 bg-white bg-opacity-50 rounded-lg shadow-lg p-6">
+                {isLoading ? (
+                    <div className="flex justify-center items-center">
+                        <Spinner />
+                    </div>
+                ) : selectedFile ? (
+                    <Button
+                        key={selectedFile.id}
+                        onClick={() => handleItemClick(selectedFile)}
+                        className="h-32 flex flex-col items-center justify-center text-center p-4 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 text-white rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition duration-300">
+                        {selectedFile.type === 'folder' ? (
+                            <Folder className="w-16 h-16 mb-3 text-white" />
+                        ) : (
+                            <File className="w-16 h-16 mb-3 text-white" />
+                        )}
+                        <span className="text-lg font-semibold truncate w-full">
+                            {selectedFile.title}
+                        </span>
+                    </Button>
+                ) : (
+                    <p className="text-gray-500 text-center">
+                        Search for a file to display here.
+                    </p>
+                )}
+
+                {/* File Options Modal */}
+                <FileOptionsModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    selectedFile={selectedFile} // Pass the selected file here
+                    onViewFile={() => {
+                        setIsModalOpen(false)
+                        console.log(`Viewing file: ${selectedFile.title}`)
+                    }}
+                    onTrackFile={() => {
+                        setIsModalOpen(false)
+                        console.log(`Tracking file: ${selectedFile.title}`)
+                    }}
+                />
+            </ScrollArea>
 
             {/* QR Code Scanner Modal */}
             {isQrScannerOpen && (
