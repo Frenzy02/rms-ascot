@@ -121,7 +121,7 @@ export default function Sidebar({ selectedItem, setSelectedItem, onLogout }) {
 
                             {/* Logout Button */}
                             <Button
-                                onClick={onLogout}
+                                onClick={onLogout} // Trigger the logout function passed as a prop
                                 variant="ghost"
                                 className="w-full justify-start text-red-300 hover:text-red-100 hover:bg-red-500/30">
                                 <LogOut className="w-5 h-5 mr-3" />

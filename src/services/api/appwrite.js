@@ -9,9 +9,6 @@ import {
     Role
 } from 'appwrite'
 
-import QRCode from 'qrcode'
-import crypto from 'crypto'
-
 export const appwriteConfig = {
     endpoint: process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT,
     projectId: process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID,
@@ -799,6 +796,124 @@ export const getFileView = async (bucketId, fileId) => {
     } catch (error) {
         console.error('Error fetching file view:', error)
         throw new Error('Failed to fetch file view.')
+    }
+}
+
+export const fetchUploadsByParentFolder = async (year, month = null) => {
+    try {
+        // Step 1: Fetch all parent folders
+        const parentFoldersResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsCollectionId
+        )
+
+        // Step 2: Fetch all subfolders
+        const subfoldersResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.subfoldersCollectionId
+        )
+
+        // Step 3: Fetch all files and filter by the selected year and month (if provided)
+        const filesResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId
+        )
+        const filesByYearAndMonth = filesResponse.documents.filter((file) => {
+            const fileDate = new Date(file.createdAt)
+            const fileYear = fileDate.getFullYear()
+            const fileMonth = fileDate.getMonth() + 1 // 0-based index, so +1
+
+            // Filter by year and optionally by month if provided
+            return fileYear === year && (month ? fileMonth === month : true)
+        })
+
+        // Step 4: Create a structure to hold the count of files per parent folder
+        const uploadsByParentFolder = parentFoldersResponse.documents.reduce(
+            (acc, folder) => {
+                const folderId = folder.$id
+                acc[folderId] = { name: folder.name, count: 0, months: {} }
+                return acc
+            },
+            {}
+        )
+
+        // Step 5: Group subfolders by parent folder ID
+        const subfoldersByParent = subfoldersResponse.documents.reduce(
+            (acc, subfolder) => {
+                const parentId = subfolder.parentId
+                if (!acc[parentId]) acc[parentId] = []
+                acc[parentId].push(subfolder.$id)
+                return acc
+            },
+            {}
+        )
+
+        // Step 6: Count files in each parent folder (including subfolder files)
+        filesByYearAndMonth.forEach((file) => {
+            const folderId = file.folderId
+            const monthLabel = new Date(file.createdAt).toLocaleString(
+                'default',
+                { month: 'short' }
+            )
+
+            // Find the parent folder of each file (either direct or via subfolder)
+            for (const [parentId, subfolderIds] of Object.entries(
+                subfoldersByParent
+            )) {
+                if (folderId === parentId || subfolderIds.includes(folderId)) {
+                    if (!uploadsByParentFolder[parentId].months[monthLabel]) {
+                        uploadsByParentFolder[parentId].months[monthLabel] = 0
+                    }
+                    uploadsByParentFolder[parentId].months[monthLabel] += 1
+                    uploadsByParentFolder[parentId].count += 1
+                }
+            }
+        })
+
+        console.log('Uploads by Parent Folder:', uploadsByParentFolder) // Debug log
+        return uploadsByParentFolder
+    } catch (error) {
+        console.error('Error fetching uploads by parent folder:', error)
+        throw new Error('Failed to fetch uploads by parent folder.')
+    }
+}
+
+export const fetchUploadsByStatusAndMonth = async (year) => {
+    try {
+        // Fetch all files and filter by the selected year
+        const filesResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId
+        )
+
+        // Filter files by year and group them by month and status
+        const uploadsByStatus = filesResponse.documents.reduce((acc, file) => {
+            const fileYear = new Date(file.createdAt).getFullYear()
+            if (fileYear === year) {
+                const month = new Date(file.createdAt).toLocaleString(
+                    'default',
+                    { month: 'short' }
+                )
+
+                if (!acc[month]) {
+                    acc[month] = { approved: 0, rejected: 0 }
+                }
+
+                // Increment count based on approval or rejection status
+                if (file.status === 'approved' && file.approvedAt) {
+                    acc[month].approved += 1
+                } else if (file.status === 'rejected' && file.rejectedAt) {
+                    acc[month].rejected += 1
+                }
+            }
+            return acc
+        }, {})
+
+        console.log('Uploads by Status:', uploadsByStatus) // Debug log
+        return uploadsByStatus
+    } catch (error) {
+        console.error('Error fetching uploads by status and month:', error)
+        throw new Error('Failed to fetch uploads by status and month.')
     }
 }
 

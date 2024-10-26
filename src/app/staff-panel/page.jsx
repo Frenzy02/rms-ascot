@@ -7,8 +7,8 @@ import { toast, ToastContainer } from 'react-toastify'
 import {
     appwriteConfig,
     signOut,
-    fetchUserFiles, // Fetch only user-specific files
-    fetchAllFiles // Fetch all files for QR code scanning
+    fetchUserFiles,
+    fetchAllFiles
 } from '@/services/api/appwrite'
 import { Client, Account } from 'appwrite'
 import { useRouter } from 'next/navigation'
@@ -28,7 +28,7 @@ export default function HomePage() {
     const [userId, setUserId] = useState(null)
     const [loading, setLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('mydocuments')
-    const [selectedItem, setSelectedItem] = useState('My Drive')
+    const [selectedItem, setSelectedItem] = useState('My Documents')
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false)
     const [isQrScannerOpen, setIsQrScannerOpen] = useState(false)
@@ -82,34 +82,80 @@ export default function HomePage() {
                 console.error('Error fetching all files:', err)
             }
         }
-
         getAllFiles()
     }, [])
 
-    // Filter logic for My Documents
-    const filteredUserFiles = searchTerm
-        ? userFiles.filter((file) =>
-              file.title.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-        : userFiles
-
-    // Search Suggestions in "Search Documents" tab
+    // Filter logic for Search Documents and My Documents
     const handleSearchDocuments = (e) => {
-        const searchValue = e.target.value.toLowerCase()
+        const searchValue = e?.target?.value.toLowerCase() || ''
         setSearchTerm(searchValue)
 
-        if (searchValue === '') {
-            setSearchSuggestions([])
-            return
+        if (selectedItem === 'Search Documents') {
+            const suggestions = searchValue
+                ? files.filter(
+                      (file) =>
+                          file.title.toLowerCase().includes(searchValue) ||
+                          file.description.toLowerCase().includes(searchValue)
+                  )
+                : []
+            setSearchSuggestions(suggestions)
+        } else if (selectedItem === 'My Documents') {
+            const userFilesFiltered = searchValue
+                ? userFiles.filter((file) =>
+                      file.title.toLowerCase().includes(searchValue)
+                  )
+                : userFiles
+            setUserFiles(userFilesFiltered) // Update only when searching within My Documents
         }
-
-        const suggestions = files.filter(
-            (file) =>
-                file.title.toLowerCase().includes(searchValue) ||
-                file.description.toLowerCase().includes(searchValue)
-        )
-        setSearchSuggestions(suggestions)
     }
+
+    // Handle file click to generate QR code
+    const handleFileClick = (file) => {
+        if (file.controlNumber) {
+            generateQRCode(file)
+        } else {
+            console.warn(
+                'Control number is missing for the selected file:',
+                file
+            )
+            toast.error('Control number is missing for the selected file.')
+        }
+    }
+
+    // Fetch user-specific files
+    useEffect(() => {
+        const getUserFiles = async () => {
+            if (!userId) return
+            setLoading(true)
+            try {
+                const fetchedUserFiles = await fetchUserFiles(userId)
+                setUserFiles(fetchedUserFiles)
+            } catch (err) {
+                console.error('Error fetching user files:', err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        getUserFiles()
+    }, [userId])
+
+    // Display user-specific files when "My Documents" is selected
+    const filteredUserFiles = selectedItem === 'My Documents' ? userFiles : []
+
+    // Handle file search in "My Documents" tab
+    const handleSearchInput = (e) => {
+        const value = e.target.value.toLowerCase()
+        setSearchTerm(value)
+    }
+    // Display files based on the selected item and search
+    const displayedFiles =
+        selectedItem === 'Search Documents' && searchTerm
+            ? files.filter((file) =>
+                  file.title.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+            : selectedItem === 'My Documents'
+            ? userFiles
+            : []
 
     // Fetch all files for QR scanning
     useEffect(() => {
@@ -139,19 +185,6 @@ export default function HomePage() {
         } catch (err) {
             console.error('Failed to generate QR code:', err)
             toast.error('Failed to generate QR code: ' + err.message)
-        }
-    }
-
-    // Handle file click to generate QR code
-    const handleFileClick = (file) => {
-        if (file.controlNumber) {
-            generateQRCode(file)
-        } else {
-            console.warn(
-                'Control number is missing for the selected file:',
-                file
-            )
-            toast.error('Control number is missing for the selected file.')
         }
     }
 
@@ -284,20 +317,14 @@ export default function HomePage() {
             <Sidebar
                 selectedItem={selectedItem}
                 setSelectedItem={setSelectedItem}
-                onLogout={handleLogoutClick}
-                onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+                onLogout={handleLogoutClick} // Pass handleLogoutClick to Sidebar
             />
 
             <div className="flex-1 flex flex-col">
-                {/* Pass selectedItem to Header to update search bar placeholder */}
                 <Header
                     searchTerm={searchTerm}
-                    setSearchTerm={
-                        selectedItem === 'Search Documents'
-                            ? handleSearchDocuments
-                            : (e) => setSearchTerm(e.target.value)
-                    }
-                    selectedItem={selectedItem} // To update search bar behavior
+                    setSearchTerm={handleSearchDocuments}
+                    selectedItem={selectedItem}
                 />
 
                 <ScrollArea className="flex-1 p-6 pb-20">
@@ -307,60 +334,33 @@ export default function HomePage() {
                             : 'My Drive'}
                     </h2>
 
-                    {/* Render Content Based on Active Tab */}
-                    {selectedItem === 'Search Documents' ? (
-                        <>
-                            {/* Search Suggestions */}
-                            {searchSuggestions.length > 0 ? (
-                                <div className="absolute top-full left-0 right-0 bg-white border border-gray-300 rounded-lg shadow-lg z-20 mt-2 max-h-60 overflow-auto">
-                                    {searchSuggestions.map((suggestion) => (
-                                        <div
-                                            key={suggestion.id}
-                                            onClick={() =>
-                                                handleFileClick(suggestion)
-                                            }
-                                            className="cursor-pointer px-4 py-2 hover:bg-gray-100">
-                                            <p className="font-medium text-gray-700">
-                                                {suggestion.title}
-                                            </p>
-                                            <p className="text-sm text-gray-500">
-                                                {suggestion.description}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500">
-                                    Start typing to search in uploaded files.
-                                </p>
-                            )}
-                        </>
-                    ) : (
-                        // Render "My Documents" tab files
+                    {displayedFiles.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {filteredUserFiles.length > 0 ? (
-                                filteredUserFiles.map((file) => (
-                                    <Button
-                                        key={file.id}
-                                        variant="outline"
-                                        onClick={() => handleFileClick(file)}
-                                        className="h-32 flex flex-col items-center justify-center text-center p-4 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 bg-blue-500 text-white">
-                                        <div className="bg-white p-2 rounded-full mb-2">
-                                            {file.fileType === 'folder' ? (
-                                                <Folder className="w-4 h-4" />
-                                            ) : (
-                                                <FileText className="w-4 h-4" />
-                                            )}
-                                        </div>
-                                        <span className="mt-2 text-sm font-medium">
-                                            {file.title || 'Untitled'}
-                                        </span>
-                                    </Button>
-                                ))
-                            ) : (
-                                <p>No files uploaded yet.</p>
-                            )}
+                            {displayedFiles.map((file) => (
+                                <Button
+                                    key={file.id}
+                                    variant="outline"
+                                    onClick={() => handleFileClick(file)}
+                                    className="h-32 flex flex-col items-center justify-center text-center p-4 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 bg-blue-500 text-white">
+                                    <div className="bg-white p-2 rounded-full mb-2">
+                                        {file.fileType === 'folder' ? (
+                                            <Folder className="w-4 h-4" />
+                                        ) : (
+                                            <FileText className="w-4 h-4" />
+                                        )}
+                                    </div>
+                                    <span className="mt-2 text-sm font-medium">
+                                        {file.title || 'Untitled'}
+                                    </span>
+                                </Button>
+                            ))}
                         </div>
+                    ) : (
+                        <p className="text-gray-500 text-center">
+                            {selectedItem === 'Search Documents'
+                                ? 'Start typing to search for files.'
+                                : 'No files uploaded yet.'}
+                        </p>
                     )}
                 </ScrollArea>
             </div>

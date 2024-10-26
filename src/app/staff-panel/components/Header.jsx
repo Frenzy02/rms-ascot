@@ -2,15 +2,15 @@ import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
 export default function Header({ searchTerm, setSearchTerm, selectedItem }) {
-    // Determine the placeholder text based on the active tab (selectedItem)
     const placeholderText =
         selectedItem === 'Search Documents'
-            ? 'Search in uploaded files' // Placeholder for "Search Documents" tab
-            : 'Search your documents' // Placeholder for "My Documents" tab
+            ? 'Search in uploaded files'
+            : 'Search your documents'
 
-    // Handle search term change
     const handleSearchChange = (e) => {
-        setSearchTerm(e.target.value) // Update the search term based on user input
+        if (typeof setSearchTerm === 'function') {
+            setSearchTerm(e) // Set search input for the active tab
+        }
     }
 
     return (
@@ -19,9 +19,9 @@ export default function Header({ searchTerm, setSearchTerm, selectedItem }) {
                 <Search className="w-4 h-4 mx-3 text-gray-500" />
                 <Input
                     type="text"
-                    placeholder={placeholderText} // Dynamic placeholder based on the active tab
+                    placeholder={placeholderText}
                     value={searchTerm}
-                    onChange={handleSearchChange} // Handle the search input change
+                    onChange={handleSearchChange}
                     className="border-none bg-transparent focus:outline-none"
                 />
             </div>
