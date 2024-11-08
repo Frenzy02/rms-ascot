@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Plus, Grid, List, Trash2, Upload } from 'lucide-react'
+import { Plus, Grid, List, Trash2, Upload, X, FileUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -10,7 +10,8 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/ui/select'
-
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label' // Add this import
 import CardView from './components/CardView'
 import ListView from './components/ListView'
 import FileItem from './components/FileItem'
@@ -20,32 +21,7 @@ import {
     uploadFile
 } from '@/services/api/appwrite'
 import { toast } from 'react-toastify'
-
-async function encryptFile(file) {
-    const key = await window.crypto.subtle.generateKey(
-        {
-            name: 'AES-GCM',
-            length: 256
-        },
-        true,
-        ['encrypt', 'decrypt']
-    )
-
-    // Convert file to ArrayBuffer
-    const fileBuffer = await file.arrayBuffer()
-    const iv = window.crypto.getRandomValues(new Uint8Array(12)) // Generate a random IV
-
-    const encryptedData = await window.crypto.subtle.encrypt(
-        {
-            name: 'AES-GCM',
-            iv: iv
-        },
-        key,
-        fileBuffer
-    )
-
-    return { encryptedData, key, iv } // Return the encrypted file data, key, and IV
-}
+import { ToastContainer } from 'react-toastify'
 
 export default function DocumentsTab() {
     const [view, setView] = useState('card')
@@ -62,6 +38,8 @@ export default function DocumentsTab() {
     const [newFileDescription, setNewFileDescription] = useState('')
     const [newFileHandleBy, setNewFileHandleBy] = useState('')
     const [uploadedFile, setUploadedFile] = useState(null)
+    const [dragActive, setDragActive] = useState(false) // Added dragActive state
+    const [isLoading, setIsLoading] = useState(false)
 
     // Filter folders based on the search term
     const filteredFolders = folders.filter((folder) =>
@@ -136,45 +114,108 @@ export default function DocumentsTab() {
         return rootFolders
     }
 
-    // Add File Handler
+    const handleFileUpload = (event) => {
+        const file = event.target.files[0]
+        if (file) setUploadedFile(file)
+    }
+
+    const handleDragOver = (e) => {
+        e.preventDefault()
+        setDragActive(true)
+    }
+
+    const handleDragLeave = () => setDragActive(false)
+
+    const handleDrop = (e) => {
+        e.preventDefault()
+        setDragActive(false)
+        const file = e.dataTransfer.files[0]
+        if (file) setUploadedFile(file)
+    }
+
     const handleAddFile = async () => {
         if (!uploadedFile) {
             alert('Please select a file to upload.')
             return
         }
 
+        setIsLoading(true) // Start loading
+
         try {
+            const titleInitials = newFileTitle
+                .split(' ')
+                .map((word) => word[0])
+                .join('')
+                .toUpperCase()
+
+            const currentDate = new Date()
+            const datePart = `${(currentDate.getMonth() + 1)
+                .toString()
+                .padStart(2, '0')}${currentDate
+                .getDate()
+                .toString()
+                .padStart(2, '0')}${currentDate.getFullYear()}`
+            const timePart = `${currentDate
+                .getHours()
+                .toString()
+                .padStart(2, '0')}${currentDate
+                .getMinutes()
+                .toString()
+                .padStart(2, '0')}${currentDate
+                .getSeconds()
+                .toString()
+                .padStart(2, '0')}`
+            const controlNumber = `CN-${titleInitials}-${datePart}-${timePart}`
+            const userId = sessionStorage.getItem('userId') || ''
+
+            // Add parentFolderId here
+            const parentFolderId = selectedFolder
+                ? selectedFolder.parentId || selectedFolder.$id
+                : null
+
+            const fileMetadata = {
+                title: newFileTitle,
+                description: newFileDescription,
+                handleBy: userId,
+                userId,
+                fileType: newFileType,
+                controlNumber,
+                status: 'approved',
+                createdAt: currentDate.toISOString(),
+                approvedAt: currentDate.toISOString(),
+                parentFolderId: parentFolderId || '' // Ensure parentFolderId is part of metadata
+            }
+
             const newFile = await uploadFile(
                 uploadedFile,
                 selectedFolder ? selectedFolder.$id : null,
-                newFileTitle,
-                newFileDescription,
-                newFileHandleBy,
-                newFileType
+                parentFolderId, // Pass parentFolderId
+                fileMetadata.title,
+                fileMetadata.description,
+                fileMetadata.handleBy,
+                fileMetadata.fileType,
+                fileMetadata.userId,
+                fileMetadata.controlNumber
             )
 
-            toast.success('File uploaded successfully!')
-
-            // Update the state with the new file without refetching
             setFolders((prevFolders) => {
                 const updatedFolders = [...prevFolders]
                 const parentFolder = findFolderById(
                     selectedFolder ? selectedFolder.$id : '',
                     updatedFolders
                 )
-
-                if (parentFolder) {
-                    parentFolder.files.push(newFile) // Add the new file directly
-                }
-
+                if (parentFolder) parentFolder.files.push(newFile)
                 return updatedFolders
             })
 
-            resetFileForm() // Reset the form
-            setShowAddFileModal(false) // Close the modal
+            toast.success('File uploaded successfully!')
+            resetFileForm()
+            setShowAddFileModal(false)
         } catch (error) {
             console.error('Error adding file:', error)
-            alert('Failed to upload the file.')
+            alert('Failed to upload the file. Please try again.')
+        } finally {
+            setIsLoading(false) // End loading
         }
     }
 
@@ -221,23 +262,6 @@ export default function DocumentsTab() {
         setNewFileHandleBy('')
         setNewFileType('PDF')
         setUploadedFile(null)
-    }
-
-    const handleFileUpload = async (event) => {
-        const file = event.target.files[0]
-        if (file) {
-            const encryptedFileData = await encryptFile(file) // Ensure encryptFile works properly
-            // Now you can create a new file instance if needed
-            const encryptedBlob = new Blob([encryptedFileData.encryptedData], {
-                type: file.type
-            })
-            const newFile = new File([encryptedBlob], file.name, {
-                type: file.type,
-                lastModified: file.lastModified
-            })
-
-            setUploadedFile(newFile)
-        }
     }
 
     const findFolderById = (folderId, folders) => {
@@ -458,84 +482,133 @@ export default function DocumentsTab() {
 
                 {/* Add File Modal */}
                 {showAddFileModal && (
-                    <div className="fixed inset-0 bg-gray-800 bg-opacity-50 flex justify-center items-center">
-                        <div className="bg-white p-6 rounded shadow-md w-full max-w-md">
-                            <h2 className="text-xl mb-4">Add New File</h2>
-                            <Input
-                                type="text"
-                                placeholder="File Title"
-                                value={newFileTitle}
-                                onChange={(e) =>
-                                    setNewFileTitle(e.target.value)
-                                }
-                                className="mb-4"
-                            />
-                            <Input
-                                type="text"
-                                placeholder="File Name"
-                                value={newFileName}
-                                onChange={(e) => setNewFileName(e.target.value)}
-                                className="mb-4"
-                            />
-                            <Input
-                                type="text"
-                                placeholder="Description"
-                                value={newFileDescription}
-                                onChange={(e) =>
-                                    setNewFileDescription(e.target.value)
-                                }
-                                className="mb-4"
-                            />
-                            <Input
-                                type="text"
-                                placeholder="Handle By"
-                                value={newFileHandleBy}
-                                onChange={(e) =>
-                                    setNewFileHandleBy(e.target.value)
-                                }
-                                className="mb-4"
-                            />
-                            <Select
-                                value={newFileType}
-                                onValueChange={setNewFileType}>
-                                <SelectTrigger className="w-full mb-4">
-                                    <SelectValue placeholder="File Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="PDF">PDF</SelectItem>
-                                    <SelectItem value="Word">Word</SelectItem>
-                                    <SelectItem value="Excel">Excel</SelectItem>
-                                    <SelectItem value="PowerPoint">
-                                        PowerPoint
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <div className="mb-4">
-                                <input
-                                    type="file"
-                                    onChange={handleFileUpload}
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+                        <div className="bg-white rounded-lg shadow-xl relative max-w-md w-full mx-auto overflow-hidden">
+                            <div className="p-6 space-y-4 overflow-y-auto max-h-[90vh] sm:max-h-[80vh]">
+                                <div className="flex justify-between items-center bg-purple-600 -mx-6 -mt-6 px-6 py-4 mb-4">
+                                    <h2 className="text-2xl font-bold text-white">
+                                        Upload Document
+                                    </h2>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                            setShowAddFileModal(false)
+                                        }
+                                        className="text-white hover:bg-purple-700 rounded-full">
+                                        <X className="h-6 w-6" />
+                                    </Button>
+                                </div>
+                                <Label
+                                    htmlFor="title"
+                                    className="text-purple-600">
+                                    Title
+                                </Label>
+                                <Input
+                                    id="title"
+                                    placeholder="Enter document title"
+                                    value={newFileTitle}
+                                    onChange={(e) =>
+                                        setNewFileTitle(e.target.value)
+                                    }
                                 />
-                                {uploadedFile && (
-                                    <p className="text-sm mt-2">
-                                        Selected file: {uploadedFile.name}
-                                    </p>
-                                )}
+                                <Label
+                                    htmlFor="description"
+                                    className="text-blue-600">
+                                    Description
+                                </Label>
+                                <Textarea
+                                    id="description"
+                                    placeholder="Enter document description"
+                                    value={newFileDescription}
+                                    onChange={(e) =>
+                                        setNewFileDescription(e.target.value)
+                                    }
+                                />
+                                <Label
+                                    htmlFor="fileType"
+                                    className="text-red-600">
+                                    File Type
+                                </Label>
+                                <select
+                                    id="fileType"
+                                    value={newFileType}
+                                    onChange={(e) =>
+                                        setNewFileType(e.target.value)
+                                    }
+                                    className="w-full p-2 border rounded-md">
+                                    <option value="" disabled>
+                                        Select File Type
+                                    </option>
+                                    <option value="PDF">PDF</option>
+                                    <option value="DOC">DOC</option>
+                                </select>
+                                <Label htmlFor="file" className="text-pink-600">
+                                    Attach File
+                                </Label>
+                                <div
+                                    className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
+                                        dragActive
+                                            ? 'border-pink-500'
+                                            : 'border-pink-300'
+                                    }`}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}>
+                                    <div className="space-y-1 text-center">
+                                        <FileUp className="mx-auto h-12 w-12 text-pink-500" />
+                                        <div className="flex text-sm text-gray-600">
+                                            <label
+                                                htmlFor="file-upload"
+                                                className="relative cursor-pointer bg-white rounded-md font-medium text-pink-600 hover:text-pink-500 focus-within:outline-none">
+                                                <span>Attach a file</span>
+                                                <input
+                                                    id="file-upload"
+                                                    name="file-upload"
+                                                    type="file"
+                                                    className="sr-only"
+                                                    onChange={handleFileUpload}
+                                                />
+                                            </label>
+                                            <p className="pl-1">
+                                                or drag and drop
+                                            </p>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            PDF, DOC, DOCX, ISO up to 10MB
+                                        </p>
+                                        {uploadedFile && (
+                                            <p className="text-xs text-green-500 mt-2">
+                                                Attached: {uploadedFile.name}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex justify-end space-x-2 pt-4 border-t border-gray-200">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() =>
+                                            setShowAddFileModal(false)
+                                        }>
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleAddFile}
+                                        disabled={isLoading}>
+                                        {isLoading ? (
+                                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                        ) : (
+                                            <Upload className="w-4 h-4 mr-2" />
+                                        )}
+                                        {isLoading ? 'Uploading...' : 'Upload'}
+                                    </Button>
+                                </div>
                             </div>
-                            <Button
-                                onClick={handleAddFile}
-                                className="bg-green-500 text-white mt-4">
-                                <Upload className="w-4 h-4 mr-2" />
-                                Upload File
-                            </Button>
-                            <Button
-                                onClick={() => setShowAddFileModal(false)}
-                                className="ml-4 mt-4">
-                                Cancel
-                            </Button>
                         </div>
                     </div>
                 )}
             </div>
+            <ToastContainer />
         </div>
     )
 }

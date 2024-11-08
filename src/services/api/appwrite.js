@@ -127,43 +127,52 @@ export const signInUser = async (email, password) => {
 }
 
 // Function to upload a file and create a file document in the database
-// Function to upload a file and create a file document in the database
 export const uploadFile = async (
     file,
     folderId,
+    parentFolderId, // Bagong parameter para sa parent folder
     fileTitle,
     fileDescription,
     fileHandleBy,
     fileType,
-    userId // Ensure userId is passed here
+    userId,
+    controlNumber
 ) => {
     try {
+        console.log('Starting file upload for:', file.name)
+
         // Step 1: Upload the file to Appwrite storage
         const fileUploaded = await storage.createFile(
             appwriteConfig.storageId,
             ID.unique(),
             file,
             [
-                Permission.read(Role.any()), // Allows anyone to read (optional)
+                Permission.read(Role.any()),
                 Permission.update(Role.users()),
                 Permission.delete(Role.users()),
                 Permission.write(Role.users())
             ]
         )
 
-        // Step 2: Prepare the file metadata and ensure 'size' is a string
+        console.log('File uploaded to storage with ID:', fileUploaded.$id)
+
+        // Step 2: Prepare file metadata
         const fileData = {
             title: fileTitle || file.name,
             description: fileDescription || '',
             handleBy: fileHandleBy || '',
-            size: `${file.size} KB`, // Convert size to string
+            size: `${file.size} KB`,
             fileType: fileType || file.type,
-            folderId: folderId || '', // If no folder, keep it empty
-            fileId: fileUploaded.$id, // Link the uploaded file by its ID
-            createdAt: new Date().toISOString() // Timestamp for creation
+            folderId: folderId || '',
+            parentFolderId: parentFolderId || '', // Bagong field para sa parent folder
+            controlNumber,
+            fileId: fileUploaded.$id,
+            createdAt: new Date().toISOString()
         }
 
-        // Step 3: Create a document with the metadata
+        console.log('Preparing to save metadata:', fileData)
+
+        // Step 3: Save file metadata to the database
         const response = await databases.createDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
@@ -171,9 +180,13 @@ export const uploadFile = async (
             fileData
         )
 
+        console.log('Metadata saved successfully:', response)
         return response
     } catch (error) {
-        console.error('Error uploading file:', error.response || error)
+        console.error(
+            'Error in uploadFile function:',
+            error.response || error.message || error
+        )
         throw new Error('Failed to upload file and save metadata.')
     }
 }
@@ -337,6 +350,54 @@ export const fetchFoldersAndFiles = async (parentFolderId = null) => {
         throw new Error('Failed to fetch data.')
     }
 }
+export const fetchParentAndSubFolders = async () => {
+    try {
+        // Fetch all parent folders from the uploads collection
+        const foldersResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsCollectionId
+        )
+
+        // Fetch all subfolders from the subfolders collection
+        const subfoldersResponse = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.subfoldersCollectionId
+        )
+
+        // Combine all folders and subfolders into one array
+        const allFolders = [
+            ...foldersResponse.documents,
+            ...subfoldersResponse.documents
+        ]
+
+        // Create a folder map to organize folders by their ID
+        const folderMap = {}
+        allFolders.forEach((folder) => {
+            folderMap[folder.$id] = { ...folder, subfolders: [] }
+        })
+
+        // Populate the subfolders into their respective parent folders
+        allFolders.forEach((folder) => {
+            if (folder.parentId && folderMap[folder.parentId]) {
+                folderMap[folder.parentId].subfolders.push(
+                    folderMap[folder.$id]
+                )
+            }
+        })
+
+        // Extract the root folders (those without a parentId)
+        const rootFolders = Object.values(folderMap).filter(
+            (folder) => !folder.parentId
+        )
+
+        // Return the constructed folder structure
+        console.log('Constructed Folder Structure:', rootFolders)
+        return { folders: rootFolders }
+    } catch (error) {
+        console.error('Error fetching folders and subfolders:', error)
+        throw new Error('Failed to fetch folders and subfolders.')
+    }
+}
 
 // Fetch records
 export const fetchRecords = async () => {
@@ -367,20 +428,21 @@ export const fetchUserFiles = async (userId) => {
             ]
         )
 
-        // Ensure that each file object contains the relevant metadata
+        // Map documents to include both `documentId` and `fileId` if available
         const userFiles = response.documents.map((file) => {
             console.log(
-                `File ID: ${file.$id}, Control Number: ${file.controlNumber}`
+                `Document ID: ${file.$id}, File ID (storage): ${file.fileId}, Control Number: ${file.controlNumber}`
             )
             return {
-                id: file.$id,
+                documentId: file.$id, // Document's unique ID
+                fileId: file.fileId, // Storage file ID (add condition if nested)
                 title: file.title || 'Untitled',
                 description: file.description || '',
                 fileType: file.fileType || 'Unknown',
                 size: file.size || '0 KB',
                 controlNumber: file.controlNumber || '',
                 createdAt: file.createdAt || new Date().toISOString(),
-                status: file.status || 'pending' // Add status to display if needed
+                status: file.status || 'pending'
             }
         })
 
@@ -612,23 +674,6 @@ export const handleDocumentRequest = async (documentId, action) => {
     } catch (error) {
         console.error('Error handling document request:', error)
         throw new Error('Failed to handle document request.')
-    }
-}
-
-export const deleteFile = async (fileId) => {
-    try {
-        const response = await storage.deleteFile(
-            appwriteConfig.storageId,
-            fileId
-        )
-        return response
-    } catch (error) {
-        if (error.code === 404) {
-            console.warn(`File with ID ${fileId} not found. Skipping deletion.`)
-            return { success: false, message: 'File not found' }
-        }
-        console.error('Error deleting file:', error)
-        throw new Error('Failed to delete file.')
     }
 }
 
@@ -914,6 +959,53 @@ export const fetchUploadsByStatusAndMonth = async (year) => {
     } catch (error) {
         console.error('Error fetching uploads by status and month:', error)
         throw new Error('Failed to fetch uploads by status and month.')
+    }
+}
+
+export const editFileMetadata = async (fileId, updatedFields) => {
+    try {
+        const response = await databases.updateDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            fileId,
+            {
+                title: updatedFields.title,
+                description: updatedFields.description,
+                controlNumber: updatedFields.controlNumber
+            }
+        )
+        console.log('File metadata updated successfully:', response)
+        return response
+    } catch (error) {
+        console.error('Error updating file metadata:', error.message)
+        throw new Error('Failed to update file metadata.')
+    }
+}
+
+export const deleteFile = async (fileId, documentId) => {
+    if (!fileId || !documentId) {
+        console.error('Error: Missing fileId or documentId parameter')
+        throw new Error('fileId and documentId are required')
+    }
+    try {
+        // Step 1: Delete the file from the storage bucket
+        console.log('Attempting to delete file with ID:', fileId)
+        await storage.deleteFile(appwriteConfig.storageId, fileId)
+        console.log('File deleted from storage successfully')
+
+        // Step 2: Delete the metadata from the uploadsfiles collection
+        console.log('Attempting to delete document with ID:', documentId)
+        await databases.deleteDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            documentId
+        )
+        console.log(
+            'Metadata deleted from uploadsfiles collection successfully'
+        )
+    } catch (error) {
+        console.error('Failed to delete file or metadata:', error.message)
+        throw error
     }
 }
 

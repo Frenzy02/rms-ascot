@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
 import QRScanDialog from './components/QRScanDialog'
+import FileOptionsModal from './components/FileOptionModal'
 
 const client = new Client()
 client.setEndpoint(appwriteConfig.endpoint).setProject(appwriteConfig.projectId)
@@ -62,7 +63,21 @@ export default function HomePage() {
             setLoading(true)
             try {
                 const fetchedUserFiles = await fetchUserFiles(userId)
-                setUserFiles(fetchedUserFiles)
+
+                // Log the structure of each file to understand where `fileId` is located
+                console.log('Fetched User Files Structure:', fetchedUserFiles)
+
+                const mappedUserFiles = fetchedUserFiles.map((file) => ({
+                    documentId: file.id, // Assuming `id` is the document's ID
+                    fileId:
+                        file.fileId ||
+                        file.storageId ||
+                        file.attributes?.fileId ||
+                        file?.metadata?.fileId, // Adjust if `fileId` is deeply nested
+                    ...file // Include all other attributes
+                }))
+
+                setUserFiles(mappedUserFiles)
             } catch (err) {
                 console.error('Error fetching user files:', err)
             } finally {
@@ -75,14 +90,14 @@ export default function HomePage() {
     // Fetch all files for "Search Documents" tab
     useEffect(() => {
         const getAllFiles = async () => {
-            try {
-                const fetchedFiles = await fetchAllFiles()
-                setFiles(fetchedFiles)
-            } catch (err) {
-                console.error('Error fetching all files:', err)
-            }
+            const fetchedFiles = await fetchAllFiles() // Fetch files from API or storage
+            const mappedFiles = fetchedFiles.map((file) => ({
+                ...file,
+                fileId: file.fileId || file.id // Map `id` to `fileId` if necessary
+            }))
+            console.log('Mapped files with fileId:', mappedFiles) // Debugging to check `fileId`
+            setFiles(mappedFiles) // Set files with ensured `fileId`
         }
-        getAllFiles()
     }, [])
 
     // Filter logic for Search Documents and My Documents
@@ -111,33 +126,47 @@ export default function HomePage() {
 
     // Handle file click to generate QR code
     const handleFileClick = (file) => {
-        if (file.controlNumber) {
-            generateQRCode(file)
-        } else {
+        if (!file) {
+            console.warn('No file selected.')
+            toast.error('No file selected.')
+            return
+        }
+
+        const documentId = file.documentId
+        const fileId = file.fileId
+
+        console.log(
+            'Attempting to view file with documentId:',
+            documentId,
+            'and fileId:',
+            fileId
+        )
+
+        if (!file.controlNumber) {
             console.warn(
                 'Control number is missing for the selected file:',
                 file
             )
             toast.error('Control number is missing for the selected file.')
+            return
         }
-    }
 
-    // Fetch user-specific files
-    useEffect(() => {
-        const getUserFiles = async () => {
-            if (!userId) return
-            setLoading(true)
-            try {
-                const fetchedUserFiles = await fetchUserFiles(userId)
-                setUserFiles(fetchedUserFiles)
-            } catch (err) {
-                console.error('Error fetching user files:', err)
-            } finally {
-                setLoading(false)
-            }
+        if (!fileId) {
+            console.warn(
+                'File ID (storage ID) is missing for the selected file:',
+                file
+            )
+            toast.error(
+                'File ID (storage ID) is missing for the selected file.'
+            )
+            return
         }
-        getUserFiles()
-    }, [userId])
+
+        // Proceed with QR code generation and modal if attributes are valid
+        generateQRCode(file)
+        setSelectedFile({ ...file, documentId, fileId })
+        setIsQrModalOpen(true)
+    }
 
     // Display user-specific files when "My Documents" is selected
     const filteredUserFiles = selectedItem === 'My Documents' ? userFiles : []
@@ -180,7 +209,7 @@ export default function HomePage() {
 
             const qrCodeUrl = await QRCode.toDataURL(file.controlNumber)
             setQrCodeData(qrCodeUrl)
-            setSelectedFile(file)
+            setSelectedFile({ ...file, qrCodeUrl }) // Pass qrCodeUrl in selectedFile
             setIsQrModalOpen(true)
         } catch (err) {
             console.error('Failed to generate QR code:', err)
@@ -366,25 +395,12 @@ export default function HomePage() {
             </div>
 
             {/* QR Code Generation Modal */}
-            {isQrModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-lg relative">
-                        <h2 className="text-lg font-bold mb-4">
-                            QR Code for {selectedFile?.title}
-                        </h2>
-                        <img
-                            src={qrCodeData}
-                            alt="QR Code"
-                            className="mx-auto mb-4"
-                        />
-                        <Button
-                            onClick={() => setIsQrModalOpen(false)}
-                            className="mt-4 w-full bg-blue-500 text-white py-2 rounded-lg">
-                            Close
-                        </Button>
-                    </div>
-                </div>
-            )}
+            <FileOptionsModal
+                isOpen={isQrModalOpen}
+                onClose={() => setIsQrModalOpen(false)}
+                selectedFile={selectedFile}
+            />
+
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 w-full z-10 bg-black/50 backdrop-blur-lg rounded-t-3xl shadow-lg px-4">
                 <div className="relative flex justify-around items-center h-20">
