@@ -13,9 +13,7 @@ import {
 
 export default function ModalContent({ onClose }) {
     const [folders, setFolders] = useState([])
-    const [breadcrumbPath, setBreadcrumbPath] = useState([
-        { name: 'Root', folderId: '', folders: [] }
-    ])
+    const [breadcrumbPath, setBreadcrumbPath] = useState([])
     const [currentSubfolders, setCurrentSubfolders] = useState([])
     const [parentFolderId, setParentFolderId] = useState('')
     const [title, setTitle] = useState('')
@@ -31,23 +29,10 @@ export default function ModalContent({ onClose }) {
         const loadFolders = async () => {
             try {
                 const { folders } = await fetchParentAndSubFolders()
+                setFolders(folders || [])
 
                 if (folders && folders.length > 0) {
-                    // Initialize breadcrumbPath with the first folder if available
-                    const rootFolder = folders[0] // Use the first folder as "Root"
-                    setFolders(folders)
-                    setBreadcrumbPath([
-                        {
-                            name: rootFolder.name,
-                            folderId: rootFolder.$id,
-                            folders
-                        }
-                    ])
                     setCurrentSubfolders(folders)
-                } else {
-                    setBreadcrumbPath([
-                        { name: 'Root', folderId: '', folders: [] }
-                    ])
                 }
             } catch (error) {
                 console.error('Error fetching folders:', error)
@@ -70,69 +55,54 @@ export default function ModalContent({ onClose }) {
     // Handle breadcrumb navigation
     const handleBreadcrumbClick = (index) => {
         const newPath = breadcrumbPath.slice(0, index + 1)
-        const lastItem = newPath[newPath.length - 1]
         setBreadcrumbPath(newPath)
+        const lastItem = newPath[newPath.length - 1]
         setCurrentSubfolders(lastItem.folders)
-
-        // Set parentFolderId as the ID of the first item in the breadcrumb
-        const firstFolder = newPath[0]
-        setParentFolderId(firstFolder.folderId || '')
+        setParentFolderId(newPath[0]?.folderId || '')
     }
 
     // Handle folder selection and update breadcrumb
     const handleFolderChange = (e) => {
         const selectedFolderId = e.target.value
-        setParentFolderId(breadcrumbPath[0].folderId || '') // Set parentFolderId from the first breadcrumb item
-
         const selectedFolder = currentSubfolders.find(
             (folder) => folder.$id === selectedFolderId
         )
 
-        if (selectedFolder && Array.isArray(selectedFolder.subfolders)) {
+        if (selectedFolder) {
+            setParentFolderId(breadcrumbPath[0]?.folderId || '')
             setBreadcrumbPath((prev) => [
                 ...prev,
                 {
                     name: selectedFolder.name,
                     folderId: selectedFolder.$id,
-                    folders: selectedFolder.subfolders
+                    folders: selectedFolder.subfolders || []
                 }
             ])
-            setCurrentSubfolders(selectedFolder.subfolders)
-        } else {
-            setCurrentSubfolders([])
+            setCurrentSubfolders(selectedFolder.subfolders || [])
         }
+    }
+
+    // Reset the folder selection
+    const resetFolderSelection = () => {
+        setBreadcrumbPath([])
+        setCurrentSubfolders(folders)
+        setParentFolderId('')
     }
 
     const handleFileChange = (e) => setFile(e.target.files[0])
 
     const handleUpload = async () => {
-        // Make sure to get the correct parentFolderId from the breadcrumb path
-        const parentFolderIdToSave = breadcrumbPath[0]?.folderId || '' // Use optional chaining for safety
-        const lastBreadcrumb = breadcrumbPath[breadcrumbPath.length - 1]
-        const folderIdToSave = lastBreadcrumb.folderId // Save the last breadcrumb ID as folderId
-
-        // Check if parentFolderId is empty and warn
-        if (!parentFolderIdToSave) {
-            console.warn(
-                'Parent folder ID is empty. Check your breadcrumb initialization.'
-            )
-            toast.error(
-                'Parent folder ID is not set. Please check your breadcrumb path.'
-            )
-            return
-        }
-
-        if (
-            !title ||
-            !description ||
-            !fileType ||
-            !file ||
-            !folderIdToSave ||
-            !controlNumber
-        ) {
+        if (!title || !description || !fileType || !file || !controlNumber) {
             toast.error('Please fill out all required fields.')
             return
         }
+
+        // Build the `path` string from breadcrumbPath
+        const path = breadcrumbPath.map((crumb) => crumb.name).join('/')
+
+        const parentFolderIdToSave = breadcrumbPath[0]?.folderId || ''
+        const lastBreadcrumb = breadcrumbPath[breadcrumbPath.length - 1]
+        const folderIdToSave = lastBreadcrumb?.folderId || ''
 
         setIsLoading(true)
 
@@ -142,13 +112,14 @@ export default function ModalContent({ onClose }) {
                 description,
                 handleBy: userId,
                 userId,
+                fileType,
                 folderId: folderIdToSave,
                 parentFolderId: parentFolderIdToSave,
-                fileType,
                 controlNumber,
+                path, // Add the path string to your metadata
                 status: 'pending',
                 createdAt: new Date().toISOString(),
-                requestDate: new Date().toLocaleDateString()
+                requestDate: new Date().toLocaleDateString() // New requestDate attribute
             })
 
             if (response && response.fileId) {
@@ -170,25 +141,23 @@ export default function ModalContent({ onClose }) {
         setDescription('')
         setFile(null)
         setParentFolderId('')
-        setBreadcrumbPath([{ name: 'Root', folderId: '', folders }])
+        setBreadcrumbPath([])
         setCurrentSubfolders(folders)
         setFileType('')
         setControlNumber('')
         onClose()
     }
 
-    const renderFolderOptions = (folders) => {
-        return [
-            <option key="default" value="" disabled>
-                Choose a folder
-            </option>,
-            ...folders.map((folder) => (
-                <option key={folder.$id} value={folder.$id}>
-                    {folder.name}
-                </option>
-            ))
-        ]
-    }
+    const renderFolderOptions = (folders) => [
+        <option key="default" value="" disabled>
+            Choose a folder
+        </option>,
+        ...folders.map((folder) => (
+            <option key={folder.$id} value={folder.$id}>
+                {folder.name}
+            </option>
+        ))
+    ]
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
@@ -267,6 +236,13 @@ export default function ModalContent({ onClose }) {
                         className="w-full p-2 border rounded-md mt-2">
                         {renderFolderOptions(currentSubfolders)}
                     </select>
+                    <div className="flex justify-end mt-2">
+                        <Button
+                            variant="outline"
+                            onClick={resetFolderSelection}>
+                            Reset Folder Selection
+                        </Button>
+                    </div>
                     <Label htmlFor="file" className="text-orange-600">
                         Attach File <span className="text-red-500">*</span>
                     </Label>

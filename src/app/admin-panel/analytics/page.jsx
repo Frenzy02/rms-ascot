@@ -81,7 +81,7 @@ export default function DocumentsAnalytics() {
             </div>
 
             <div className="flex space-x-4 mb-6">
-                {['Parent Folder', 'Uploads', 'File Types'].map((tab) => (
+                {['Uploads'].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -114,30 +114,6 @@ export default function DocumentsAnalytics() {
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-lg">
-                {activeTab === 'Parent Folder' && (
-                    <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={folderData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <Tooltip />
-                            <Legend />
-                            {Object.keys(folderData[0] || {}).map(
-                                (monthLabel) =>
-                                    monthLabel !== 'name' ? (
-                                        <Bar
-                                            key={monthLabel}
-                                            dataKey={monthLabel}
-                                            fill={`#${Math.floor(
-                                                Math.random() * 16777215
-                                            ).toString(16)}`}
-                                        />
-                                    ) : null
-                            )}
-                        </BarChart>
-                    </ResponsiveContainer>
-                )}
-
                 {activeTab === 'Uploads' && (
                     <ResponsiveContainer width="100%" height={400}>
                         <BarChart data={statusData}>
@@ -150,12 +126,6 @@ export default function DocumentsAnalytics() {
                             <Bar dataKey="rejected" fill="#FF8042" />
                         </BarChart>
                     </ResponsiveContainer>
-                )}
-
-                {activeTab === 'File Types' && (
-                    <div>
-                        <p>File Types Analytics Coming Soon!</p>
-                    </div>
                 )}
             </div>
         </div>

@@ -3,11 +3,19 @@ import { Eye, Search, User, Calendar, FileText } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
+} from '@/components/ui/select'
 import { fetchFilesWithViews } from '@/services/api/appwrite'
 
 const ActivityLog = () => {
     const [filesData, setFilesData] = useState([])
     const [filter, setFilter] = useState('')
+    const [sortOption, setSortOption] = useState('mostViewed')
     const [expandedRows, setExpandedRows] = useState([])
 
     useEffect(() => {
@@ -31,11 +39,24 @@ const ActivityLog = () => {
         )
     }
 
+    // Filtering logic
     const filteredData = filter
         ? filesData.filter((file) =>
               file.title.toLowerCase().includes(filter.toLowerCase())
           )
         : filesData
+
+    // Sorting logic
+    const sortedData = [...filteredData].sort((a, b) => {
+        if (sortOption === 'mostViewed') {
+            return b.views - a.views
+        } else if (sortOption === 'leastViewed') {
+            return a.views - b.views
+        } else if (sortOption === 'fileNameAZ') {
+            return a.title.localeCompare(b.title)
+        }
+        return 0
+    })
 
     return (
         <div className="container mx-auto p-6 bg-gray-100 min-h-screen">
@@ -43,7 +64,7 @@ const ActivityLog = () => {
                 Activity Log
             </h1>
 
-            <div className="flex items-center space-x-2 bg-white p-3 rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
+            <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 bg-white p-3 rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
                 <Input
                     type="text"
                     placeholder="Search by file name, user, or date"
@@ -57,6 +78,20 @@ const ActivityLog = () => {
                     className="bg-blue-600 text-white hover:bg-blue-500 p-3 rounded-full">
                     <Search className="h-5 w-5" />
                 </Button>
+                <Select onValueChange={setSortOption}>
+                    <SelectTrigger className="bg-white border-gray-300 rounded-lg p-2">
+                        <SelectValue placeholder="Sort By" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="mostViewed">Most Viewed</SelectItem>
+                        <SelectItem value="leastViewed">
+                            Least Viewed
+                        </SelectItem>
+                        <SelectItem value="fileNameAZ">
+                            File Name A-Z
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             <Card className="overflow-hidden bg-white shadow-lg rounded-lg max-w-4xl mx-auto">
@@ -74,8 +109,8 @@ const ActivityLog = () => {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                    {filteredData.length > 0 ? (
-                        filteredData.map((file) => (
+                    {sortedData.length > 0 ? (
+                        sortedData.map((file) => (
                             <div
                                 key={file.fileId}
                                 className="border-b last:border-b-0">

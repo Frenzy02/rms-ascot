@@ -10,7 +10,8 @@ import {
 import { CheckCircle, XCircle, Upload, FileText } from 'lucide-react'
 import {
     fetchDocumentRequests,
-    handleDocumentRequest
+    handleDocumentRequest,
+    getUserData
 } from '@/services/api/appwrite'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,6 +30,7 @@ const DocumentRequestsTab = () => {
     const [requests, setRequests] = useState([])
     const [searchTerm, setSearchTerm] = useState('')
     const [filterType, setFilterType] = useState('all')
+    const [statusFilter, setStatusFilter] = useState('all')
     const [currentPage, setCurrentPage] = useState(1)
     const [loading, setLoading] = useState(false)
     const itemsPerPage = 5
@@ -39,7 +41,24 @@ const DocumentRequestsTab = () => {
             setLoading(true)
             try {
                 const data = await fetchDocumentRequests()
-                setRequests(data)
+
+                // Fetch user data and add to requests
+                const requestsWithUserData = await Promise.all(
+                    data.map(async (request) => {
+                        const userData = await getUserData(request.handleBy)
+                        return {
+                            ...request,
+                            staffName: `${userData.firstname} ${userData.lastname}`
+                        }
+                    })
+                )
+
+                // Sort requests by createdAt in descending order (newest first)
+                requestsWithUserData.sort(
+                    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+                )
+
+                setRequests(requestsWithUserData)
                 toast.success('Requests loaded successfully')
             } catch (error) {
                 console.error('Failed to load document requests:', error)
@@ -94,15 +113,20 @@ const DocumentRequestsTab = () => {
     // Handle filter change
     const handleFilterChange = (value) => setFilterType(value)
 
+    // Handle status filter change
+    const handleStatusFilterChange = (value) => setStatusFilter(value)
+
     // Filter and search logic
     const filteredRequests = requests.filter((req) => {
         const matchesSearch =
             req.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            req.handleBy?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            req.staffName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             req.controlNumber?.toLowerCase().includes(searchTerm.toLowerCase())
         const matchesFilter =
             filterType === 'all' || req.fileType === filterType
-        return matchesSearch && matchesFilter
+        const matchesStatus =
+            statusFilter === 'all' || req.status === statusFilter
+        return matchesSearch && matchesFilter && matchesStatus
     })
 
     // Pagination logic
@@ -158,6 +182,17 @@ const DocumentRequestsTab = () => {
                         <SelectItem value="upload">Upload Request</SelectItem>
                     </SelectContent>
                 </Select>
+                <Select onValueChange={handleStatusFilterChange}>
+                    <SelectTrigger className="w-full sm:w-[180px] bg-white">
+                        <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             {/* Document Requests Table */}
@@ -190,7 +225,7 @@ const DocumentRequestsTab = () => {
                                             Upload Request
                                         </Badge>
                                     </TableCell>
-                                    <TableCell>{request.handleBy}</TableCell>
+                                    <TableCell>{request.staffName}</TableCell>
                                     <TableCell>
                                         <FileText className="mr-2" />
                                         {request.title}
@@ -200,7 +235,7 @@ const DocumentRequestsTab = () => {
                                     </TableCell>
                                     <TableCell>
                                         {new Date(
-                                            request.requestDate
+                                            request.createdAt
                                         ).toLocaleString()}
                                     </TableCell>
                                     <TableCell>

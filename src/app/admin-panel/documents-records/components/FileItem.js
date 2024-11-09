@@ -15,6 +15,11 @@ import { editFileMetadata, deleteFile } from '@/services/api/appwrite'
 import { toast } from 'react-toastify'
 
 export default function FileItem({ file, onDelete }) {
+    // If the file status is not 'approved', return null to hide the file
+    if (file.status !== 'approved') {
+        return null
+    }
+
     const [showActions, setShowActions] = useState(false)
     const actionMenuRef = useRef(null)
     const buttonRef = useRef(null)

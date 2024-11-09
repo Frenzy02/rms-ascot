@@ -23,6 +23,9 @@ import {
 import { toast } from 'react-toastify'
 import { ToastContainer } from 'react-toastify'
 
+// Import the deleteFolderAndContents function
+import { deleteFolderAndContents } from '@/services/api/appwrite'
+
 export default function DocumentsTab() {
     const [view, setView] = useState('card')
     const [searchTerm, setSearchTerm] = useState('')
@@ -295,60 +298,72 @@ export default function DocumentsTab() {
 
         return currentFolders.map((folder) => (
             <div
-                key={folder.$id || folder.id} // Ensure unique key for each folder
+                key={folder.$id || folder.id}
                 className="relative group cursor-pointer"
-                onClick={() => selectFolder(folder)} // Handle folder selection
-            >
-                {/* Display Folder as Card or List View */}
+                onClick={() => selectFolder(folder)}>
                 {view === 'card' ? (
                     <CardView folder={folder} />
                 ) : (
                     <ListView folder={folder} />
                 )}
-
-                {/* Folder Trash Icon (for deletion) */}
                 <Trash2
                     className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 cursor-pointer"
                     onClick={(e) => {
-                        e.stopPropagation() // Prevent click from selecting folder
-                        openDeleteConfirm(folder) // Open delete confirmation
+                        e.stopPropagation()
+                        openDeleteConfirm(folder)
                     }}
                 />
-
-                {/* Render Subfolders Recursively */}
                 {folder.subfolders && folder.subfolders.length > 0 && (
                     <div className="pl-4 mt-2">
                         {renderFolders(folder.subfolders)}
                     </div>
                 )}
-
-                {/* Render Files in the Folder */}
                 {folder.files && folder.files.length > 0 && (
                     <div className="pl-4 mt-2">
-                        {folder.files.map((file) => (
-                            <FileItem
-                                key={file.$id || file.id} // Ensure unique key for each file
-                                file={file} // Pass the entire file object
-                                onView={() =>
-                                    console.log(`Viewing ${file.name}`)
-                                }
-                                onEdit={() =>
-                                    console.log(`Editing ${file.name}`)
-                                }
-                                onGenerateQR={() =>
-                                    console.log(
-                                        `Generating QR for ${file.name}`
-                                    )
-                                }
-                                onDelete={() =>
-                                    console.log(`Deleting ${file.name}`)
-                                }
-                            />
-                        ))}
+                        {folder.files
+                            .filter((file) => file.status === 'approved') // Filter to show only approved files
+                            .map((file) => (
+                                <FileItem
+                                    key={file.$id || file.id}
+                                    file={file}
+                                    onView={() =>
+                                        console.log(`Viewing ${file.name}`)
+                                    }
+                                    onEdit={() =>
+                                        console.log(`Editing ${file.name}`)
+                                    }
+                                    onGenerateQR={() =>
+                                        console.log(
+                                            `Generating QR for ${file.name}`
+                                        )
+                                    }
+                                    onDelete={() =>
+                                        console.log(`Deleting ${file.name}`)
+                                    }
+                                />
+                            ))}
                     </div>
                 )}
             </div>
         ))
+    }
+    const openDeleteConfirm = async (folder) => {
+        const confirmDelete = window.confirm(
+            `Are you sure you want to delete the folder "${folder.name}" and all its contents? This action cannot be undone.`
+        )
+        if (confirmDelete) {
+            try {
+                // Call the deleteFolderAndContents function
+                await deleteFolderAndContents(folder.$id)
+                toast.success(
+                    `Folder "${folder.name}" and all its contents have been deleted.`
+                )
+                fetchInitialFolders() // Refresh folders list
+            } catch (error) {
+                toast.error('Failed to delete folder. Please try again.')
+                console.error('Failed to delete folder:', error) // Log the error for debugging
+            }
+        }
     }
 
     return (

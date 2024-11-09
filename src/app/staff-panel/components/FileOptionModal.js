@@ -11,9 +11,10 @@ import { toast } from 'react-toastify'
 import {
     fetchFileMetadata,
     getUserData,
-    fetchDocumentHistory
+    fetchDocumentHistory,
+    logFileView // Import logFileView function
 } from '@/services/api/appwrite'
-import { appwriteConfig, databases } from '@/services/api/appwrite'
+import { appwriteConfig } from '@/services/api/appwrite'
 
 const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
     const [localErrorMsg, setLocalErrorMsg] = useState(errorMsg)
@@ -23,8 +24,7 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
     const [currentHolderReceivedDateTime, setCurrentHolderReceivedDateTime] =
         useState('')
     const [createdAt, setCreatedAt] = useState('')
-    const [parentFolderId, setParentFolderId] = useState('')
-    const [subFolderId, setSubFolderId] = useState('')
+    const [path, setPath] = useState('')
 
     useEffect(() => {
         if (selectedFile) {
@@ -45,17 +45,9 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             )
             setCreatedAt(new Date(fileMetadata.createdAt).toLocaleString())
 
-            // Fetch folder names using correct IDs and collections
-            const parentFolderName = fileMetadata.parentFolderId
-                ? await getFolderNameById(fileMetadata.parentFolderId, true)
-                : 'None'
-
-            const subFolderName = fileMetadata.folderId
-                ? await getFolderNameById(fileMetadata.folderId, false)
-                : 'None'
-
-            setParentFolderId(parentFolderName)
-            setSubFolderId(subFolderName)
+            // Fetch the path attributes directly from the file metadata
+            const constructedPath = fileMetadata.path || 'Root'
+            setPath(constructedPath)
 
             // Fetch the document history to get the received date and time for the current holder
             const history = await fetchDocumentHistory(selectedFile.documentId)
@@ -70,137 +62,54 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             } else {
                 setCurrentHolderReceivedDateTime('Unknown')
             }
-        } catch (error) {
-            console.error('Error fetching current holder:', error)
-            toast.error('Failed to fetch current holder.')
-        }
-    }
 
-    const getFolderNameById = async (folderId, isParentFolder) => {
-        try {
-            const collectionId = isParentFolder
-                ? appwriteConfig.uploadsCollectionId
-                : appwriteConfig.subfoldersCollectionId
-
-            console.log(
-                'Fetching folder name for ID:',
-                folderId,
-                'in collection:',
-                collectionId
-            )
-
-            const folder = await databases.getDocument(
-                appwriteConfig.databaseId,
-                collectionId,
-                folderId
-            )
-
-            return folder.name || 'Unknown'
-        } catch (error) {
-            console.error(
-                `Error fetching folder name for ID ${folderId}:`,
-                error
-            )
-            if (
-                error.message.includes(
-                    'Document with the requested ID could not be found'
-                )
-            ) {
-                console.warn(
-                    `Folder with ID ${folderId} was not found in the database.`
-                )
-            }
-            return 'Folder Not Found'
-        }
-    }
-
-    const handleTrackFileHolder = async () => {
-        if (!selectedFile) {
-            toast.error('No file selected to track.')
-            return
-        }
-        try {
-            console.log(
-                'Fetching history for documentId:',
-                selectedFile.documentId
-            )
-
-            const history = await fetchDocumentHistory(selectedFile.documentId)
-
-            if (history && history.length > 0) {
-                const historyWithNames = await Promise.all(
-                    history.map(async (entry, index) => {
-                        const previousHolder = await getUserData(
-                            entry.previousHolder
-                        )
-                        return {
-                            previousHolder: `${previousHolder.firstname} ${previousHolder.lastname}`,
-                            dateReceived:
-                                index === 0
-                                    ? new Date(
-                                          selectedFile.createdAt
-                                      ).toLocaleString()
-                                    : new Date(
-                                          entry.dateReceived
-                                      ).toLocaleString()
-                        }
-                    })
-                )
-                setFileHistory(historyWithNames)
-                setCurrentHolderReceivedDateTime(
-                    historyWithNames[historyWithNames.length - 1].dateReceived
-                )
-            } else {
-                console.warn('No history found for this file.')
-                const metadata = await fetchFileMetadata(
-                    selectedFile.documentId
-                )
-                const currentHolder = await getUserData(metadata.handleBy)
-                setFileHistory([
-                    {
-                        previousHolder: `${currentHolder.firstname} ${currentHolder.lastname}`,
+            // Map history with user names
+            const historyWithNames = await Promise.all(
+                history.map(async (entry) => {
+                    const previousHolder = await getUserData(
+                        entry.previousHolder
+                    )
+                    return {
+                        previousHolder: `${previousHolder.firstname} ${previousHolder.lastname}`,
                         dateReceived: new Date(
-                            metadata.createdAt
+                            entry.dateReceived
                         ).toLocaleString()
                     }
-                ])
-                setCurrentHolderReceivedDateTime(
-                    new Date(metadata.createdAt).toLocaleString()
-                )
-            }
-
-            setHistoryDialogOpen(true)
+                })
+            )
+            setFileHistory(historyWithNames)
         } catch (error) {
             console.error('Error fetching document history:', error)
-            toast.error('Failed to fetch document history.')
 
+            // Clear the previous holders if history fetch fails
+            setFileHistory([])
+
+            // Set fallback current holder information
             try {
-                const metadata = await fetchFileMetadata(
+                const fileMetadata = await fetchFileMetadata(
                     selectedFile.documentId
                 )
-                const currentHolder = await getUserData(metadata.handleBy)
-                setFileHistory([
-                    {
-                        previousHolder: `${currentHolder.firstname} ${currentHolder.lastname}`,
-                        dateReceived: new Date(
-                            metadata.createdAt
-                        ).toLocaleString()
-                    }
-                ])
+                const currentHolder = await getUserData(fileMetadata.handleBy)
                 setCurrentHolderReceivedDateTime(
-                    new Date(metadata.createdAt).toLocaleString()
+                    new Date(fileMetadata.createdAt).toLocaleString()
                 )
-                setHistoryDialogOpen(true)
-            } catch (metaError) {
-                console.error('Error fetching metadata as fallback:', metaError)
-                toast.error('Failed to fetch file metadata. Please try again.')
+            } catch (fallbackError) {
+                console.error(
+                    'Error fetching metadata as fallback:',
+                    fallbackError
+                )
             }
         }
     }
 
     const handleViewFile = async () => {
         try {
+            const userId = sessionStorage.getItem('userId')
+            const department = sessionStorage.getItem('department')
             if (selectedFile && selectedFile.fileId) {
+                // Log the file view
+                await logFileView(selectedFile.documentId, userId, department)
+
                 const viewUrl = `http://localhost/v1/storage/buckets/${appwriteConfig.storageId}/files/${selectedFile.fileId}/view?project=${appwriteConfig.projectId}`
                 window.open(viewUrl, '_blank')
             } else {
@@ -212,6 +121,10 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             console.error('Error viewing file:', error.message)
             toast.error(error.message)
         }
+    }
+
+    const handleTrackFileHolder = () => {
+        setHistoryDialogOpen(true)
     }
 
     if (!isOpen || !selectedFile) return null
@@ -259,15 +172,10 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                         </p>
                     </div>
 
-                    {/* Display parentFolderId and subFolderId */}
+                    {/* Display folder path */}
                     <div className="mt-4 text-center">
-                        <h3 className="text-sm font-semibold">Folder Info:</h3>
-                        <p className="text-gray-500 text-sm">
-                            Parent Folder ID: {parentFolderId}
-                        </p>
-                        <p className="text-gray-500 text-sm">
-                            Subfolder ID: {subFolderId}
-                        </p>
+                        <h3 className="text-sm font-semibold">Folder Path:</h3>
+                        <p className="text-gray-500 text-sm">{path}</p>
                     </div>
 
                     {/* Display error message if exists */}
@@ -306,15 +214,21 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                                 Previous Holders
                             </h3>
                             <ul className="list-disc pl-5 text-left">
-                                {fileHistory.map((h, index) => (
-                                    <li key={index}>
-                                        {h.previousHolder}
-                                        {h.dateReceived && <br />}
-                                        <span className="text-gray-500 text-sm">
-                                            Received: {h.dateReceived}
-                                        </span>
-                                    </li>
-                                ))}
+                                {fileHistory.length > 0 ? (
+                                    fileHistory.map((h, index) => (
+                                        <li key={index}>
+                                            {h.previousHolder}
+                                            {h.dateReceived && <br />}
+                                            <span className="text-gray-500 text-sm">
+                                                Received: {h.dateReceived}
+                                            </span>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-gray-500">
+                                        No previous holders.
+                                    </p>
+                                )}
                             </ul>
                         </div>
 

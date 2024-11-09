@@ -34,7 +34,20 @@ const storage = new Storage(client)
 const databases = new Databases(client)
 
 export { client, account, storage, databases }
-
+// Add the checkFolderExists function here
+export const checkFolderExists = async (folderId, collectionId) => {
+    try {
+        const folder = await databases.getDocument(
+            appwriteConfig.databaseId,
+            collectionId,
+            folderId
+        )
+        return folder ? true : false
+    } catch (error) {
+        console.error(`Folder with ID ${folderId} does not exist:`, error)
+        return false
+    }
+}
 // User signup
 export const signUpUser = async (formData) => {
     try {
@@ -626,57 +639,6 @@ export const updateHandleBy = async (fileId, newHolder) => {
     }
 }
 
-export const handleDocumentRequest = async (documentId, action) => {
-    try {
-        // Fetch the document metadata using documentId
-        const document = await databases.getDocument(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId,
-            documentId
-        )
-
-        if (!document) {
-            throw new Error(
-                'Document with the requested ID could not be found.'
-            )
-        }
-
-        // Prepare updated data based on action
-        const updatedData = {
-            status: action === 'approve' ? 'approved' : 'rejected',
-            approvedAt:
-                action === 'approve'
-                    ? new Date().toISOString()
-                    : document.approvedAt,
-            rejectedAt:
-                action === 'reject'
-                    ? new Date().toISOString()
-                    : document.rejectedAt
-        }
-
-        // Update the document metadata with the new status
-        const response = await databases.updateDocument(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId,
-            documentId,
-            updatedData
-        )
-
-        // Optionally, delete the file from storage if rejected
-        if (action === 'reject') {
-            const deleteResponse = await deleteFile(document.fileId)
-            if (deleteResponse.success === false) {
-                console.warn(`File ${document.fileId} could not be deleted.`)
-            }
-        }
-
-        return response
-    } catch (error) {
-        console.error('Error handling document request:', error)
-        throw new Error('Failed to handle document request.')
-    }
-}
-
 export const logFileView = async (fileId, userId, department) => {
     try {
         const response = await databases.createDocument(
@@ -981,7 +943,6 @@ export const editFileMetadata = async (fileId, updatedFields) => {
         throw new Error('Failed to update file metadata.')
     }
 }
-
 export const deleteFile = async (fileId, documentId) => {
     if (!fileId || !documentId) {
         console.error('Error: Missing fileId or documentId parameter')
@@ -1006,6 +967,212 @@ export const deleteFile = async (fileId, documentId) => {
     } catch (error) {
         console.error('Failed to delete file or metadata:', error.message)
         throw error
+    }
+}
+
+export const handleDocumentRequest = async (documentId, action) => {
+    try {
+        // Fetch the document metadata using documentId
+        const document = await databases.getDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            documentId
+        )
+
+        if (!document) {
+            throw new Error(
+                'Document with the requested ID could not be found.'
+            )
+        }
+
+        // Prepare updated data based on action
+        const updatedData = {
+            status: action === 'approve' ? 'approved' : 'rejected',
+            approvedAt:
+                action === 'approve'
+                    ? new Date().toISOString()
+                    : document.approvedAt,
+            rejectedAt:
+                action === 'reject'
+                    ? new Date().toISOString()
+                    : document.rejectedAt
+        }
+
+        // Update the document metadata with the new status
+        const response = await databases.updateDocument(
+            appwriteConfig.databaseId,
+            appwriteConfig.uploadsfilesCollectionId,
+            documentId,
+            updatedData
+        )
+
+        // Delete the file from storage if rejected
+        if (action === 'reject') {
+            await deleteFile(document.fileId, documentId)
+            console.log(`File ${document.fileId} and metadata deleted.`)
+        }
+
+        return response
+    } catch (error) {
+        console.error('Error handling document request:', error)
+        throw new Error('Failed to handle document request.')
+    }
+}
+
+export const deleteFolderAndContents = async (folderId) => {
+    try {
+        console.log(`Attempting to delete folder with ID: ${folderId}`)
+
+        // Fetch subfolders and files
+        const { folders: subfolders, files } = await fetchFoldersAndFiles(
+            folderId
+        )
+        console.log(
+            `Fetched ${subfolders.length} subfolders and ${files.length} files.`
+        )
+
+        // Delete all files in the folder
+        for (const file of files) {
+            try {
+                console.log(`Deleting file with ID: ${file.fileId}`)
+                // Attempt to delete file from storage
+                await storage.deleteFile(appwriteConfig.storageId, file.fileId)
+                console.log(
+                    `File ${file.fileId} deleted successfully from storage.`
+                )
+
+                // Delete file metadata from uploadsfilesCollection
+                await databases.deleteDocument(
+                    appwriteConfig.databaseId,
+                    appwriteConfig.uploadsfilesCollectionId,
+                    file.$id
+                )
+                console.log(
+                    `Metadata for file ${file.fileId} deleted from uploadsfiles collection.`
+                )
+            } catch (error) {
+                if (error.code === 404) {
+                    console.warn(
+                        `File or metadata not found, skipping: ${file.fileId}`
+                    )
+                } else {
+                    throw error
+                }
+            }
+        }
+
+        // Recursively delete all subfolders
+        for (const subfolder of subfolders) {
+            console.log(
+                `Recursively deleting subfolder with ID: ${subfolder.$id}`
+            )
+            await deleteFolderAndContents(subfolder.$id)
+        }
+
+        // Delete parent folder metadata from uploadsfilesCollection
+        try {
+            console.log(
+                `Deleting parent folder metadata from uploadsfiles collection: ${folderId}`
+            )
+            await databases.deleteDocument(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                folderId
+            )
+            console.log(
+                `Parent folder metadata ${folderId} deleted from uploadsfiles collection.`
+            )
+        } catch (error) {
+            if (error.code === 404) {
+                console.warn(
+                    `Parent folder metadata ${folderId} not found in uploadsfiles collection.`
+                )
+            } else {
+                throw error
+            }
+        }
+
+        // Delete parent folder metadata from subfoldersCollection (if it exists)
+        try {
+            console.log(
+                `Attempting to delete parent folder metadata from subfolders collection: ${folderId}`
+            )
+            await databases.deleteDocument(
+                appwriteConfig.databaseId,
+                appwriteConfig.subfoldersCollectionId,
+                folderId
+            )
+            console.log(
+                `Parent folder metadata ${folderId} deleted from subfolders collection.`
+            )
+        } catch (error) {
+            if (error.code === 404) {
+                console.warn(
+                    `Parent folder metadata ${folderId} not found in subfolders collection, skipping deletion.`
+                )
+            } else {
+                throw error
+            }
+        }
+    } catch (error) {
+        console.error('Error deleting folder and its contents:', error)
+        throw new Error('Failed to delete folder and its contents.')
+    }
+}
+
+export const deleteFolder = async (folderId, isParentFolder = true) => {
+    try {
+        console.log(`Attempting to delete folder with ID: ${folderId}`)
+
+        // Fetch subfolders and files
+        const { folders, files } = await fetchFoldersAndFiles(folderId)
+        console.log(
+            `Fetched ${folders.length} subfolders and ${files.length} files.`
+        )
+
+        // Delete all files in the folder
+        for (const file of files) {
+            try {
+                console.log(`Deleting file with ID: ${file.fileId}`)
+                await deleteFile(file.fileId, file.$id)
+                console.log(`File ${file.fileId} deleted successfully.`)
+            } catch (error) {
+                console.error(`Failed to delete file ${file.fileId}:`, error)
+                throw new Error(`Failed to delete file ${file.fileId}`)
+            }
+        }
+
+        // Recursively delete all subfolders
+        for (const subfolder of folders) {
+            try {
+                console.log(
+                    `Recursively deleting subfolder with ID: ${subfolder.$id}`
+                )
+                await deleteFolder(subfolder.$id, false)
+            } catch (error) {
+                console.error(
+                    `Failed to delete subfolder ${subfolder.$id}:`,
+                    error
+                )
+                throw new Error(`Failed to delete subfolder ${subfolder.$id}`)
+            }
+        }
+
+        // Delete the folder itself
+        const collectionId = isParentFolder
+            ? appwriteConfig.uploadsCollectionId
+            : appwriteConfig.subfoldersCollectionId
+        console.log(`Deleting folder from collection: ${collectionId}`)
+        await databases.deleteDocument(
+            appwriteConfig.databaseId,
+            collectionId,
+            folderId
+        )
+
+        console.log(`Folder ${folderId} deleted successfully.`)
+    } catch (error) {
+        console.error('Error deleting folder and its contents:', error)
+        throw new Error('Failed to delete folder and its contents.')
     }
 }
 
