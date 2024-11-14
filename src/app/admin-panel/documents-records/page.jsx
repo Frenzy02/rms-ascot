@@ -1,6 +1,15 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Plus, Grid, List, Trash2, Upload, X, FileUp } from 'lucide-react'
+import {
+    Plus,
+    Grid,
+    List,
+    Trash2,
+    Upload,
+    X,
+    FileUp,
+    ChevronLeft
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,13 +27,91 @@ import FileItem from './components/FileItem'
 import {
     createFolder,
     fetchFoldersAndFiles,
+    getAllUsers,
     uploadFile
 } from '@/services/api/appwrite'
 import { toast } from 'react-toastify'
 import { ToastContainer } from 'react-toastify'
+import ReactSelect from 'react-select' // Rename the import to ReactSelect
 
 // Import the deleteFolderAndContents function
 import { deleteFolderAndContents } from '@/services/api/appwrite'
+
+function Breadcrumb({ path, onBack }) {
+    return (
+        <div className="flex items-center text-sm text-gray-600 mb-4">
+            <ChevronLeft
+                className="cursor-pointer mr-2"
+                onClick={() => onBack()} // Call the back function when the icon is clicked
+            />
+            {path.map((folder, index) => (
+                <React.Fragment key={folder.$id || folder.id}>
+                    <span className="text-gray-500">{folder.name}</span>
+                    {index < path.length - 1 && <span className="mx-2">/</span>}
+                </React.Fragment>
+            ))}
+        </div>
+    )
+}
+
+function RestrictAccessUI({ allUsers, restrictedUsers, setRestrictedUsers }) {
+    const [options, setOptions] = useState([])
+
+    useEffect(() => {
+        // Filter the users based on the role being 'staff' or 'viewer'
+        const filteredUsers = allUsers.filter(
+            (user) => user.role === 'staff' || user.role === 'viewer'
+        )
+
+        // Map the filtered users to options for the select dropdown
+        const userOptions = filteredUsers.map((user) => ({
+            value: user.id,
+            label: user.name
+        }))
+
+        // Add a "Select All Users" option at the top
+        setOptions([
+            { value: 'all', label: 'Select All Users' },
+            ...userOptions
+        ])
+    }, [allUsers])
+
+    const handleSelectionChange = (selectedOptions) => {
+        // Handle the case where "Select All Users" is selected
+        if (selectedOptions.some((option) => option.value === 'all')) {
+            setRestrictedUsers(allUsers.map((user) => user.id))
+        } else {
+            setRestrictedUsers(selectedOptions.map((option) => option.value))
+        }
+    }
+
+    // Filter selected options based on the restricted users
+    const selectedOptions = options.filter((option) =>
+        restrictedUsers.includes(option.value)
+    )
+
+    return (
+        <div>
+            <Label htmlFor="restrictedUsers" className="text-orange-600">
+                Restrict Access
+            </Label>
+            <ReactSelect
+                id="restrictedUsers"
+                options={options}
+                value={selectedOptions}
+                onChange={handleSelectionChange}
+                isMulti
+                placeholder="Select users to restrict"
+            />
+            {selectedOptions.length > 0 && (
+                <div className="mt-2 text-sm text-gray-600">
+                    <strong>Selected Users:</strong>{' '}
+                    {selectedOptions.map((option) => option.label).join(', ')}
+                </div>
+            )}
+        </div>
+    )
+}
 
 export default function DocumentsTab() {
     const [view, setView] = useState('card')
@@ -43,65 +130,121 @@ export default function DocumentsTab() {
     const [uploadedFile, setUploadedFile] = useState(null)
     const [dragActive, setDragActive] = useState(false) // Added dragActive state
     const [isLoading, setIsLoading] = useState(false)
+    const [allUsers, setAllUsers] = useState([]) // Initialize allUsers state
+    const [restrictedUsers, setRestrictedUsers] = useState([])
+    const [controlNumber, setControlNumber] = useState('') // Added for manual input
+    const [breadcrumbPath, setBreadcrumbPath] = useState([]) // New state for breadcrumb
 
     // Filter folders based on the search term
     const filteredFolders = folders.filter((folder) =>
         folder.name.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
-    // Fetch initial folders on component mount
+    // Load users and initial folders on component mount
     useEffect(() => {
+        const loadUsers = async () => {
+            const users = await getAllUsers()
+            setAllUsers(users)
+        }
+        loadUsers()
         fetchInitialFolders()
     }, [])
 
-    // Fetch folders and files from Appwrite
+    // Fetch initial folders and reset the breadcrumb path
     const fetchInitialFolders = async () => {
         try {
             const { folders, files } = await fetchFoldersAndFiles(null)
             const nestedFolders = buildNestedFolderStructure(folders, files)
             setFolders(nestedFolders || [])
+            setBreadcrumbPath([])
+            setSelectedFolder(null)
         } catch (error) {
             console.error('Error fetching folders:', error)
         }
     }
 
-    // Fetch subfolders and files when selecting a folder
     const selectFolder = async (folder) => {
         setSelectedFolder(folder)
         try {
+            // Always fetch the subfolders and files for the clicked folder
             const { folders: subfolders, files } = await fetchFoldersAndFiles(
                 folder.$id
             )
+
+            // Update the selected folder with new subfolders and files
             const updatedFolders = [...folders]
             const parentFolder = findFolderById(folder.$id, updatedFolders)
             if (parentFolder) {
                 parentFolder.subfolders = subfolders
-                parentFolder.files = files // Attach files to the folder
+                parentFolder.files = files
             }
+
             setFolders(updatedFolders)
+            setBreadcrumbPath((prevPath) => [...prevPath, folder])
         } catch (error) {
             console.error('Error fetching subfolders and files:', error)
         }
     }
 
-    // Helper function to build nested folder structure and attach files
+    const handleBack = async () => {
+        if (breadcrumbPath.length > 1) {
+            const newPath = breadcrumbPath.slice(0, -1)
+            setBreadcrumbPath(newPath)
+
+            const folder = newPath[newPath.length - 1]
+            if (folder) {
+                // Fetch content of the previous folder
+                setSelectedFolder(folder)
+                try {
+                    const { folders: subfolders, files } =
+                        await fetchFoldersAndFiles(folder.$id)
+
+                    // Reset and update the folder structure
+                    const updatedFolders = buildNestedFolderStructure(
+                        subfolders,
+                        files
+                    )
+                    setFolders((prevFolders) => {
+                        const newFolders = [...prevFolders]
+                        const parentFolder = findFolderById(
+                            folder.$id,
+                            newFolders
+                        )
+                        if (parentFolder) {
+                            parentFolder.subfolders = subfolders
+                            parentFolder.files = files
+                        }
+                        return newFolders
+                    })
+                } catch (error) {
+                    console.error(
+                        'Error fetching folders for back navigation:',
+                        error
+                    )
+                }
+            } else {
+                fetchInitialFolders()
+            }
+        } else {
+            fetchInitialFolders()
+        }
+    }
+
+    // Build nested folder structure
     const buildNestedFolderStructure = (folders, files) => {
         const folderMap = {}
         const rootFolders = []
 
-        // Initialize folder map
         folders.forEach((folder) => {
             folderMap[folder.$id] = { ...folder, subfolders: [], files: [] }
         })
 
-        // Attach files to their respective folders
         files.forEach((file) => {
             if (folderMap[file.folderId]) {
                 folderMap[file.folderId].files.push(file)
             }
         })
 
-        // Populate subfolders
         folders.forEach((folder) => {
             if (folder.parentId) {
                 if (folderMap[folder.parentId]) {
@@ -117,188 +260,27 @@ export default function DocumentsTab() {
         return rootFolders
     }
 
-    const handleFileUpload = (event) => {
-        const file = event.target.files[0]
-        if (file) setUploadedFile(file)
-    }
-
-    const handleDragOver = (e) => {
-        e.preventDefault()
-        setDragActive(true)
-    }
-
-    const handleDragLeave = () => setDragActive(false)
-
-    const handleDrop = (e) => {
-        e.preventDefault()
-        setDragActive(false)
-        const file = e.dataTransfer.files[0]
-        if (file) setUploadedFile(file)
-    }
-
-    const handleAddFile = async () => {
-        if (!uploadedFile) {
-            alert('Please select a file to upload.')
-            return
-        }
-
-        setIsLoading(true) // Start loading
-
-        try {
-            const titleInitials = newFileTitle
-                .split(' ')
-                .map((word) => word[0])
-                .join('')
-                .toUpperCase()
-
-            const currentDate = new Date()
-            const datePart = `${(currentDate.getMonth() + 1)
-                .toString()
-                .padStart(2, '0')}${currentDate
-                .getDate()
-                .toString()
-                .padStart(2, '0')}${currentDate.getFullYear()}`
-            const timePart = `${currentDate
-                .getHours()
-                .toString()
-                .padStart(2, '0')}${currentDate
-                .getMinutes()
-                .toString()
-                .padStart(2, '0')}${currentDate
-                .getSeconds()
-                .toString()
-                .padStart(2, '0')}`
-            const controlNumber = `CN-${titleInitials}-${datePart}-${timePart}`
-            const userId = sessionStorage.getItem('userId') || ''
-
-            // Add parentFolderId here
-            const parentFolderId = selectedFolder
-                ? selectedFolder.parentId || selectedFolder.$id
-                : null
-
-            const fileMetadata = {
-                title: newFileTitle,
-                description: newFileDescription,
-                handleBy: userId,
-                userId,
-                fileType: newFileType,
-                controlNumber,
-                status: 'approved',
-                createdAt: currentDate.toISOString(),
-                approvedAt: currentDate.toISOString(),
-                parentFolderId: parentFolderId || '' // Ensure parentFolderId is part of metadata
-            }
-
-            const newFile = await uploadFile(
-                uploadedFile,
-                selectedFolder ? selectedFolder.$id : null,
-                parentFolderId, // Pass parentFolderId
-                fileMetadata.title,
-                fileMetadata.description,
-                fileMetadata.handleBy,
-                fileMetadata.fileType,
-                fileMetadata.userId,
-                fileMetadata.controlNumber
-            )
-
-            setFolders((prevFolders) => {
-                const updatedFolders = [...prevFolders]
-                const parentFolder = findFolderById(
-                    selectedFolder ? selectedFolder.$id : '',
-                    updatedFolders
-                )
-                if (parentFolder) parentFolder.files.push(newFile)
-                return updatedFolders
-            })
-
-            toast.success('File uploaded successfully!')
-            resetFileForm()
-            setShowAddFileModal(false)
-        } catch (error) {
-            console.error('Error adding file:', error)
-            alert('Failed to upload the file. Please try again.')
-        } finally {
-            setIsLoading(false) // End loading
-        }
-    }
-
-    // Add Folder Handler
-    const handleAddFolder = async () => {
-        if (!newFolderName.trim()) {
-            alert('Please enter a valid folder name.')
-            return
-        }
-
-        try {
-            const folder = await createFolder(
-                newFolderName,
-                selectedFolder ? selectedFolder.$id : null
-            )
-
-            if (selectedFolder) {
-                const updatedFolders = [...folders]
-                const parentFolder = findFolderById(
-                    selectedFolder.$id,
-                    updatedFolders
-                )
-                if (parentFolder) {
-                    parentFolder.subfolders = parentFolder.subfolders || []
-                    parentFolder.subfolders.push({ ...folder, subfolders: [] })
-                }
-                setFolders(updatedFolders)
-            } else {
-                setFolders([...folders, { ...folder, subfolders: [] }])
-            }
-
-            setShowAddFolderModal(false)
-            setNewFolderName('')
-        } catch (error) {
-            console.error('Error creating folder:', error)
-            alert('Failed to create folder.')
-        }
-    }
-
-    const resetFileForm = () => {
-        setNewFileName('')
-        setNewFileTitle('')
-        setNewFileDescription('')
-        setNewFileHandleBy('')
-        setNewFileType('PDF')
-        setUploadedFile(null)
-    }
-
+    // Helper function to find a folder by its ID
     const findFolderById = (folderId, folders) => {
         for (let folder of folders) {
-            if (folder.$id === folderId) {
-                return folder
-            }
+            if (folder.$id === folderId) return folder
             if (folder.subfolders) {
                 const foundInSubfolder = findFolderById(
                     folderId,
                     folder.subfolders
                 )
-                if (foundInSubfolder) {
-                    return foundInSubfolder
-                }
+                if (foundInSubfolder) return foundInSubfolder
             }
         }
         return null
     }
 
-    // Clear subfolders when navigating back to the root
-    const handleBackToFolders = () => {
-        setSelectedFolder(null)
-        fetchInitialFolders() // Refresh to show only root folders
-    }
-
-    // Recursive folder and file rendering
-    // Recursive folder and file rendering
+    // Render folders and files
     const renderFolders = (currentFolders) => {
         if (!Array.isArray(currentFolders)) return null
-
         return currentFolders.map((folder) => (
             <div
-                key={folder.$id || folder.id}
+                key={folder.$id || folder.id} // Ensure a unique key prop
                 className="relative group cursor-pointer"
                 onClick={() => selectFolder(folder)}>
                 {view === 'card' ? (
@@ -321,10 +303,10 @@ export default function DocumentsTab() {
                 {folder.files && folder.files.length > 0 && (
                     <div className="pl-4 mt-2">
                         {folder.files
-                            .filter((file) => file.status === 'approved') // Filter to show only approved files
+                            .filter((file) => file.status === 'approved')
                             .map((file) => (
                                 <FileItem
-                                    key={file.$id || file.id}
+                                    key={file.$id || file.id} // Unique key prop
                                     file={file}
                                     onView={() =>
                                         console.log(`Viewing ${file.name}`)
@@ -347,6 +329,133 @@ export default function DocumentsTab() {
             </div>
         ))
     }
+
+    const handleFileUpload = (event) => {
+        const file = event.target.files[0]
+        if (file) setUploadedFile(file)
+    }
+
+    const handleDragOver = (e) => {
+        e.preventDefault()
+        setDragActive(true)
+    }
+
+    const handleDragLeave = () => setDragActive(false)
+
+    const handleDrop = (e) => {
+        e.preventDefault()
+        setDragActive(false)
+        const file = e.dataTransfer.files[0]
+        if (file) setUploadedFile(file)
+    }
+
+    const handleAddFile = async () => {
+        if (!uploadedFile || !controlNumber.trim()) {
+            alert(
+                'Please select a file to upload and provide a control number.'
+            )
+            return
+        }
+
+        setIsLoading(true) // Start loading
+
+        try {
+            const userId = sessionStorage.getItem('userId')
+            const userRole = sessionStorage.getItem('userRole') || ''
+
+            if (!userId) {
+                console.error(
+                    'User ID is missing. Please make sure you are logged in.'
+                )
+                alert('User ID is missing. Please log in again.')
+                setIsLoading(false)
+                return
+            }
+
+            // Construct the breadcrumb path using folder names
+            const breadcrumbString = breadcrumbPath
+                .map((folder) => folder.name)
+                .join('/')
+            console.log('Generated Breadcrumb Path:', breadcrumbString) // Debugging log
+
+            const currentDate = new Date()
+            const parentFolderId = selectedFolder ? selectedFolder.$id : null
+
+            const fileMetadata = {
+                title: newFileTitle,
+                description: newFileDescription,
+                handleBy: userId,
+                userId: userId,
+                fileType: newFileType,
+                controlNumber: controlNumber,
+                status: 'approved',
+                createdAt: currentDate.toISOString(),
+                approvedAt: currentDate.toISOString(),
+                parentFolderId: parentFolderId || '',
+                path: breadcrumbString // Save the correct breadcrumb path
+            }
+
+            const permissions = restrictedUsers.map((id) => `user:${id}`)
+            if (userRole === 'admin') {
+                permissions.push('role:admin')
+            }
+
+            // Pass breadcrumbPath as an argument to uploadFile
+            const newFile = await uploadFile(
+                uploadedFile,
+                selectedFolder ? selectedFolder.$id : null,
+                parentFolderId,
+                fileMetadata.title,
+                fileMetadata.description,
+                fileMetadata.handleBy,
+                fileMetadata.fileType,
+                fileMetadata.userId,
+                fileMetadata.controlNumber,
+                permissions,
+                breadcrumbPath // Pass breadcrumbPath here
+            )
+
+            // Fetch updated folder and file structure
+            const { folders: subfolders, files } = await fetchFoldersAndFiles(
+                selectedFolder.$id
+            )
+            const updatedFolders = buildNestedFolderStructure(subfolders, files)
+
+            setFolders((prevFolders) => {
+                const updatedFolders = [...prevFolders]
+                const parentFolder = findFolderById(
+                    selectedFolder.$id,
+                    updatedFolders
+                )
+                if (parentFolder) {
+                    parentFolder.subfolders = subfolders
+                    parentFolder.files = files
+                }
+                return updatedFolders
+            })
+
+            toast.success('File uploaded successfully!')
+            resetFileForm()
+            setShowAddFileModal(false)
+        } catch (error) {
+            console.error('Error adding file:', error)
+            alert('Failed to upload the file. Please try again.')
+        } finally {
+            setIsLoading(false) // End loading
+        }
+    }
+
+    const resetFileForm = () => {
+        setNewFileName('') // Reset file name
+        setNewFileTitle('') // Reset file title
+        setNewFileDescription('') // Reset description
+        setNewFileHandleBy('') // Reset file handle by
+        setNewFileType('PDF') // Reset file type to default
+        setUploadedFile(null) // Reset the uploaded file
+        setControlNumber('') // Reset control number
+        setRestrictedUsers([]) // Clear restricted users
+    }
+
     const openDeleteConfirm = async (folder) => {
         const confirmDelete = window.confirm(
             `Are you sure you want to delete the folder "${folder.name}" and all its contents? This action cannot be undone.`
@@ -401,6 +510,10 @@ export default function DocumentsTab() {
                     </div>
                 </div>
 
+                {selectedFolder && (
+                    <Breadcrumb path={breadcrumbPath} onBack={handleBack} />
+                )}
+
                 {/* Search and Sort Section */}
                 <div className="flex mb-6">
                     <Input
@@ -426,9 +539,6 @@ export default function DocumentsTab() {
                 {/* Folder and File Display */}
                 {selectedFolder ? (
                     <div>
-                        <Button onClick={handleBackToFolders} className="mb-4">
-                            Back to Folders
-                        </Button>
                         <h2 className="text-2xl font-semibold mb-4">
                             {selectedFolder.name}
                         </h2>
@@ -495,12 +605,12 @@ export default function DocumentsTab() {
                     </div>
                 )}
 
-                {/* Add File Modal */}
                 {showAddFileModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-                        <div className="bg-white rounded-lg shadow-xl relative max-w-md w-full mx-auto overflow-hidden">
-                            <div className="p-6 space-y-4 overflow-y-auto max-h-[90vh] sm:max-h-[80vh]">
-                                <div className="flex justify-between items-center bg-purple-600 -mx-6 -mt-6 px-6 py-4 mb-4">
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
+                        <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-auto">
+                            <div className="p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                                {/* Modal Header */}
+                                <div className="flex justify-between items-center bg-orange-600 px-6 py-4 mb-4">
                                     <h2 className="text-2xl font-bold text-white">
                                         Upload Document
                                     </h2>
@@ -510,106 +620,164 @@ export default function DocumentsTab() {
                                         onClick={() =>
                                             setShowAddFileModal(false)
                                         }
-                                        className="text-white hover:bg-purple-700 rounded-full">
+                                        className="text-white hover:bg-orange-700 rounded-full">
                                         <X className="h-6 w-6" />
                                     </Button>
                                 </div>
-                                <Label
-                                    htmlFor="title"
-                                    className="text-purple-600">
-                                    Title
-                                </Label>
-                                <Input
-                                    id="title"
-                                    placeholder="Enter document title"
-                                    value={newFileTitle}
-                                    onChange={(e) =>
-                                        setNewFileTitle(e.target.value)
-                                    }
-                                />
-                                <Label
-                                    htmlFor="description"
-                                    className="text-blue-600">
-                                    Description
-                                </Label>
-                                <Textarea
-                                    id="description"
-                                    placeholder="Enter document description"
-                                    value={newFileDescription}
-                                    onChange={(e) =>
-                                        setNewFileDescription(e.target.value)
-                                    }
-                                />
-                                <Label
-                                    htmlFor="fileType"
-                                    className="text-red-600">
-                                    File Type
-                                </Label>
-                                <select
-                                    id="fileType"
-                                    value={newFileType}
-                                    onChange={(e) =>
-                                        setNewFileType(e.target.value)
-                                    }
-                                    className="w-full p-2 border rounded-md">
-                                    <option value="" disabled>
-                                        Select File Type
-                                    </option>
-                                    <option value="PDF">PDF</option>
-                                    <option value="DOC">DOC</option>
-                                </select>
-                                <Label htmlFor="file" className="text-pink-600">
-                                    Attach File
-                                </Label>
-                                <div
-                                    className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
-                                        dragActive
-                                            ? 'border-pink-500'
-                                            : 'border-pink-300'
-                                    }`}
-                                    onDragOver={handleDragOver}
-                                    onDragLeave={handleDragLeave}
-                                    onDrop={handleDrop}>
-                                    <div className="space-y-1 text-center">
-                                        <FileUp className="mx-auto h-12 w-12 text-pink-500" />
-                                        <div className="flex text-sm text-gray-600">
-                                            <label
-                                                htmlFor="file-upload"
-                                                className="relative cursor-pointer bg-white rounded-md font-medium text-pink-600 hover:text-pink-500 focus-within:outline-none">
-                                                <span>Attach a file</span>
-                                                <input
-                                                    id="file-upload"
-                                                    name="file-upload"
-                                                    type="file"
-                                                    className="sr-only"
-                                                    onChange={handleFileUpload}
-                                                />
-                                            </label>
-                                            <p className="pl-1">
-                                                or drag and drop
-                                            </p>
+
+                                {/* Form Fields */}
+                                <div className="grid grid-cols-2 gap-6">
+                                    {/* Document Title */}
+                                    <div>
+                                        <Label
+                                            htmlFor="title"
+                                            className="text-orange-600">
+                                            Title
+                                        </Label>
+                                        <Input
+                                            id="title"
+                                            placeholder="Enter document title"
+                                            value={newFileTitle}
+                                            onChange={(e) =>
+                                                setNewFileTitle(e.target.value)
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* Document Description */}
+                                    <div>
+                                        <Label
+                                            htmlFor="description"
+                                            className="text-orange-600">
+                                            Description
+                                        </Label>
+                                        <Textarea
+                                            id="description"
+                                            placeholder="Enter document description"
+                                            value={newFileDescription}
+                                            onChange={(e) =>
+                                                setNewFileDescription(
+                                                    e.target.value
+                                                )
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* File Type Selection */}
+                                    <div>
+                                        <Label
+                                            htmlFor="fileType"
+                                            className="text-orange-600">
+                                            File Type
+                                        </Label>
+                                        <select
+                                            id="fileType"
+                                            value={newFileType}
+                                            onChange={(e) =>
+                                                setNewFileType(e.target.value)
+                                            }
+                                            className="w-full p-2 border rounded-md border-orange-300 focus:ring-orange-500">
+                                            <option value="PDF">PDF</option>
+                                            <option value="DOCX">DOCX</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Control Number Input */}
+                                    <div>
+                                        <Label
+                                            htmlFor="controlNumber"
+                                            className="text-orange-600">
+                                            Control Number
+                                        </Label>
+                                        <Input
+                                            id="controlNumber"
+                                            placeholder="Enter control number"
+                                            value={controlNumber}
+                                            onChange={(e) =>
+                                                setControlNumber(e.target.value)
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* Restrict Access Dropdown */}
+                                    <div className="col-span-2">
+                                        <RestrictAccessUI
+                                            allUsers={allUsers}
+                                            restrictedUsers={restrictedUsers}
+                                            setRestrictedUsers={
+                                                setRestrictedUsers
+                                            }
+                                        />
+                                    </div>
+
+                                    {/* File Upload */}
+                                    <div className="col-span-2">
+                                        <Label
+                                            htmlFor="file"
+                                            className="text-orange-600">
+                                            Attach File
+                                        </Label>
+                                        <div
+                                            className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md ${
+                                                dragActive
+                                                    ? 'border-orange-500'
+                                                    : 'border-orange-300'
+                                            }`}
+                                            onDragOver={handleDragOver}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={handleDrop}>
+                                            <div className="space-y-1 text-center">
+                                                <FileUp className="mx-auto h-12 w-12 text-orange-500" />
+                                                <div className="flex text-sm text-gray-600">
+                                                    <label
+                                                        htmlFor="file-upload"
+                                                        className="relative cursor-pointer bg-white rounded-md font-medium text-orange-600 hover:text-orange-500 focus-within:outline-none">
+                                                        <span>
+                                                            Attach a file
+                                                        </span>
+                                                        <input
+                                                            id="file-upload"
+                                                            name="file-upload"
+                                                            type="file"
+                                                            className="sr-only"
+                                                            accept=".pdf, .docx" // Accept .pdf and .docx files
+                                                            onChange={
+                                                                handleFileUpload
+                                                            }
+                                                        />
+                                                    </label>
+                                                    <p className="pl-1">
+                                                        or drag and drop
+                                                    </p>
+                                                </div>
+                                                <p className="text-xs text-gray-500">
+                                                    PDF, and DOCX up to 20MB
+                                                </p>
+                                                {uploadedFile && (
+                                                    <p className="text-xs text-green-500 mt-2">
+                                                        Attached:{' '}
+                                                        {uploadedFile.name}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
-                                        <p className="text-xs text-gray-500">
-                                            PDF, DOC, DOCX, ISO up to 10MB
-                                        </p>
-                                        {uploadedFile && (
-                                            <p className="text-xs text-green-500 mt-2">
-                                                Attached: {uploadedFile.name}
-                                            </p>
-                                        )}
                                     </div>
                                 </div>
+
+                                {/* Modal Footer */}
                                 <div className="flex justify-end space-x-2 pt-4 border-t border-gray-200">
                                     <Button
                                         variant="outline"
                                         onClick={() =>
                                             setShowAddFileModal(false)
-                                        }>
+                                        }
+                                        className="text-orange-600 border-orange-600">
                                         Cancel
                                     </Button>
                                     <Button
                                         onClick={handleAddFile}
-                                        disabled={isLoading}>
+                                        disabled={isLoading}
+                                        className="bg-orange-500 hover:bg-orange-600 text-white">
                                         {isLoading ? (
                                             <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                                         ) : (

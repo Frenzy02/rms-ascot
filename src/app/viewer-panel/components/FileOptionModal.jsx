@@ -106,13 +106,34 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
         try {
             const userId = sessionStorage.getItem('userId')
             const department = sessionStorage.getItem('department')
+
+            if (!userId) {
+                throw new Error('User not authenticated.')
+            }
+
             if (selectedFile) {
-                console.log('Fetching view for file ID:', selectedFile.fileId)
+                // Fetch file metadata and check for restrictions
+                const fileMetadata = await fetchFileMetadata(selectedFile.id)
+                console.log('File Metadata:', fileMetadata)
+
+                // Check if the user is restricted
+                const restrictedUsers = fileMetadata.restrictedUsers
+                    ? fileMetadata.restrictedUsers
+                          .split(',')
+                          .map((id) => id.trim())
+                    : []
+
+                if (restrictedUsers.includes(`user:${userId}`)) {
+                    // Show toast error if the user is restricted
+                    toast.error('You do not have permission to view this file.')
+                    return
+                }
+
+                // Log the view if the user is not restricted
                 await logFileView(selectedFile.id, userId, department)
 
+                // Generate the view URL and open the file
                 const viewUrl = `http://localhost/v1/storage/buckets/${appwriteConfig.storageId}/files/${selectedFile.fileId}/view?project=${appwriteConfig.projectId}`
-
-                console.log('Fetched view URL:', viewUrl)
                 window.open(viewUrl, '_blank')
             } else {
                 throw new Error('Selected file does not have a valid fileId.')
@@ -120,6 +141,7 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
         } catch (error) {
             console.error('Error viewing file:', error.message)
             setErrorMsg(error.message)
+            toast.error(error.message)
         }
     }
 

@@ -139,37 +139,71 @@ export const signInUser = async (email, password) => {
     }
 }
 
-// Function to upload a file and create a file document in the database
+export const getAllUsers = async () => {
+    try {
+        const response = await databases.listDocuments(
+            appwriteConfig.databaseId,
+            appwriteConfig.userCollectionId
+        )
+        const users = response.documents.map((user) => ({
+            id: user.$id,
+            name: `${user.firstname} ${user.lastname}`, // Adjust this based on your data structure
+            email: user.email,
+            role: user.role // Ensure that `role` is available here
+        }))
+        return users
+    } catch (error) {
+        console.error('Error fetching users from Appwrite:', error)
+        return []
+    }
+}
+
 export const uploadFile = async (
     file,
     folderId,
-    parentFolderId, // Bagong parameter para sa parent folder
+    parentFolderId,
     fileTitle,
     fileDescription,
     fileHandleBy,
     fileType,
     userId,
-    controlNumber
+    controlNumber,
+    restrictedUsers = [],
+    breadcrumbPath
 ) => {
     try {
-        console.log('Starting file upload for:', file.name)
+        // Ensure user is authenticated
+        const session = await account.get()
+        if (!session) {
+            throw new Error(
+                'User session is invalid or expired. Please log in again.'
+            )
+        }
 
-        // Step 1: Upload the file to Appwrite storage
+        // Set the MIME type manually (use correct MIME types for the files)
+        const fileMimeType =
+            fileType === 'PDF'
+                ? 'application/pdf'
+                : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+        // Upload file to Appwrite storage with the correct MIME type
         const fileUploaded = await storage.createFile(
             appwriteConfig.storageId,
             ID.unique(),
             file,
             [
-                Permission.read(Role.any()),
-                Permission.update(Role.users()),
-                Permission.delete(Role.users()),
-                Permission.write(Role.users())
-            ]
+                Permission.read(Role.user(userId)),
+                Permission.write(Role.user(userId))
+            ],
+            fileMimeType // Explicitly set the MIME type for .docx or .pdf
         )
 
-        console.log('File uploaded to storage with ID:', fileUploaded.$id)
+        // Construct breadcrumb path and metadata
+        const breadcrumbString = breadcrumbPath
+            .map((folder) => folder.name)
+            .join('/')
+        console.log('Breadcrumb path to save:', breadcrumbString) // Debugging log
 
-        // Step 2: Prepare file metadata
         const fileData = {
             title: fileTitle || file.name,
             description: fileDescription || '',
@@ -177,30 +211,39 @@ export const uploadFile = async (
             size: `${file.size} KB`,
             fileType: fileType || file.type,
             folderId: folderId || '',
-            parentFolderId: parentFolderId || '', // Bagong field para sa parent folder
-            controlNumber,
+            parentFolderId: parentFolderId || '',
+            controlNumber: controlNumber || 'N/A',
+            userId: userId,
             fileId: fileUploaded.$id,
+            path: breadcrumbString, // Save the breadcrumb path
+            restrictedUsers: restrictedUsers.join(','),
+            status: 'approved',
             createdAt: new Date().toISOString()
         }
 
-        console.log('Preparing to save metadata:', fileData)
+        const permissions = [
+            Permission.read(Role.user(userId)),
+            Permission.update(Role.user(userId)),
+            Permission.delete(Role.user(userId)),
+            Permission.write(Role.user(userId))
+        ]
 
-        // Step 3: Save file metadata to the database
+        // Create the document with the prepared metadata and permissions
         const response = await databases.createDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
             ID.unique(),
-            fileData
+            fileData,
+            permissions
         )
 
-        console.log('Metadata saved successfully:', response)
+        console.log('File metadata saved successfully:', response)
         return response
     } catch (error) {
-        console.error(
-            'Error in uploadFile function:',
-            error.response || error.message || error
+        console.error('Error in uploadFile function:', error)
+        throw new Error(
+            `Failed to upload file and save metadata: ${error.message}`
         )
-        throw new Error('Failed to upload file and save metadata.')
     }
 }
 
@@ -923,19 +966,19 @@ export const fetchUploadsByStatusAndMonth = async (year) => {
         throw new Error('Failed to fetch uploads by status and month.')
     }
 }
-
 export const editFileMetadata = async (fileId, updatedFields) => {
     try {
+        // Log the fields being updated
+        console.log('Updating file metadata:', fileId, updatedFields)
+
+        // Update the document in the Appwrite database
         const response = await databases.updateDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
             fileId,
-            {
-                title: updatedFields.title,
-                description: updatedFields.description,
-                controlNumber: updatedFields.controlNumber
-            }
+            updatedFields // Pass the updatedFields object directly
         )
+
         console.log('File metadata updated successfully:', response)
         return response
     } catch (error) {
@@ -943,6 +986,7 @@ export const editFileMetadata = async (fileId, updatedFields) => {
         throw new Error('Failed to update file metadata.')
     }
 }
+
 export const deleteFile = async (fileId, documentId) => {
     if (!fileId || !documentId) {
         console.error('Error: Missing fileId or documentId parameter')
