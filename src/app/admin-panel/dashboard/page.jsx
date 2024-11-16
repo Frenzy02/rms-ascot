@@ -1,9 +1,9 @@
 // components/Dashboard.jsx
-import React, { useEffect, useState } from 'react'
-import axios from 'axios'
+'use client'
+
+import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { fetchUsers } from '@/services/api/user-management'
 
 // Icon components
 const CalendarIcon = (props) => (
@@ -81,30 +81,10 @@ const UserIcon = (props) => (
 
 const Dashboard = () => {
     const [userCount, setUserCount] = useState(0)
-    const [error, setError] = useState(null)
-
-    const fetchUserCount = async () => {
-        try {
-            const response = await fetchUsers() // Call fetchUsers function
-            if (response.success) {
-                setUserCount(response.count) // Get the count from the response
-            } else {
-                throw new Error(response.error)
-            }
-        } catch (error) {
-            console.error('Error fetching user count:', error)
-            setError('Failed to fetch user data. Please try again later.')
-        }
-    }
-
-    useEffect(() => {
-        fetchUserCount()
-    }, [])
 
     return (
         <div className="flex flex-col min-h-screen w-full bg-neutral-900 text-neutral-200 p-6">
             <main className="flex-1 p-4 sm:p-6">
-                {error && <div className="text-red-500 mb-4">{error}</div>}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {/* Card: Users */}
                     <Card>
@@ -124,7 +104,7 @@ const Dashboard = () => {
                         </CardContent>
                     </Card>
 
-                    {/* Card: Medical Records */}
+                    {/* Card: Documents Record */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium">
@@ -156,7 +136,7 @@ const Dashboard = () => {
                         </CardContent>
                     </Card>
 
-                    {/* Card: Medical Requests */}
+                    {/* Card: Documents Request */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between pb-2">
                             <CardTitle className="text-sm font-medium">
