@@ -107,6 +107,7 @@ export default function ModalContent({ onClose }) {
         setIsLoading(true)
 
         try {
+            // Prepare the metadata, including the new `dateReceived` field
             const response = await uploadDocumentRequest(file, {
                 title,
                 description,
@@ -119,7 +120,8 @@ export default function ModalContent({ onClose }) {
                 path, // Add the path string to your metadata
                 status: 'pending',
                 createdAt: new Date().toISOString(),
-                requestDate: new Date().toLocaleDateString() // New requestDate attribute
+                dateReceived: new Date().toISOString(), // Add the `dateReceived` field
+                requestDate: new Date().toLocaleDateString()
             })
 
             if (response && response.fileId) {

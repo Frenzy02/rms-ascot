@@ -34,36 +34,32 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
 
     const fetchCurrentHolder = async () => {
         try {
+            // Fetch the file metadata from uploadsCollection
             const fileMetadata = await fetchFileMetadata(
-                selectedFile.documentId
+                selectedFile.id || selectedFile.documentId
             )
+
+            // Extract the handleBy and dateReceived from the file metadata
             const currentHolderUserId = fileMetadata.handleBy
             const currentHolder = await getUserData(currentHolderUserId)
+            const currentDateReceived = fileMetadata.dateReceived
 
+            // Set the current holder's name and received date
             setCurrentHolderName(
                 `${currentHolder.firstname} ${currentHolder.lastname}`
             )
-            setCreatedAt(new Date(fileMetadata.createdAt).toLocaleString())
-
-            // Fetch the path attributes directly from the file metadata
-            const constructedPath = fileMetadata.path || 'Root'
-            setPath(constructedPath)
-
-            // Fetch the document history to get the received date and time for the current holder
-            const history = await fetchDocumentHistory(selectedFile.documentId)
-            const currentHolderEntry = history.find(
-                (entry) => entry.currentHolder === currentHolderUserId
+            setCurrentHolderReceivedDateTime(
+                currentDateReceived
+                    ? new Date(currentDateReceived).toLocaleString()
+                    : 'Unknown'
             )
 
-            // Format date and time if available
-            if (currentHolderEntry?.dateReceived) {
-                const date = new Date(currentHolderEntry.dateReceived)
-                setCurrentHolderReceivedDateTime(date.toLocaleString())
-            } else {
-                setCurrentHolderReceivedDateTime('Unknown')
-            }
+            // Fetch the document history for previous holders
+            const history = await fetchDocumentHistory(
+                selectedFile.id || selectedFile.documentId
+            )
 
-            // Map history with user names
+            // Map history to get previous holders and their dateReceived
             const historyWithNames = await Promise.all(
                 history.map(async (entry) => {
                     const previousHolder = await getUserData(
@@ -77,28 +73,11 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                     }
                 })
             )
+
             setFileHistory(historyWithNames)
         } catch (error) {
-            console.error('Error fetching document history:', error)
-
-            // Clear the previous holders if history fetch fails
+            console.error('Error fetching document history or metadata:', error)
             setFileHistory([])
-
-            // Set fallback current holder information
-            try {
-                const fileMetadata = await fetchFileMetadata(
-                    selectedFile.documentId
-                )
-                const currentHolder = await getUserData(fileMetadata.handleBy)
-                setCurrentHolderReceivedDateTime(
-                    new Date(fileMetadata.createdAt).toLocaleString()
-                )
-            } catch (fallbackError) {
-                console.error(
-                    'Error fetching metadata as fallback:',
-                    fallbackError
-                )
-            }
         }
     }
 
@@ -113,37 +92,47 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             }
 
             if (selectedFile) {
-                // Fetch file metadata
-                const fileMetadata = await fetchFileMetadata(selectedFile.id)
-                console.log('File Metadata:', fileMetadata)
+                let fileMetadata = null
 
-                // Check if the user is restricted
-                const restrictedUsers = fileMetadata.restrictedUsers
-                    ? fileMetadata.restrictedUsers
-                          .split(',')
-                          .map((id) => id.trim())
-                    : []
-
-                if (restrictedUsers.includes(`user:${userId}`)) {
-                    // Show toast error if the user is restricted
-                    toast.error('You do not have permission to view this file.')
-                    return
+                // Try fetching file metadata, but continue even if it fails
+                try {
+                    fileMetadata = await fetchFileMetadata(selectedFile.id)
+                    console.log('File Metadata:', fileMetadata)
+                } catch (error) {
+                    console.warn(
+                        'Failed to fetch file metadata, proceeding without it.'
+                    )
                 }
 
-                // Log the view if the user is not restricted
-                await logFileView(selectedFile.id, userId, department)
+                // If metadata is available, check if the user is restricted
+                if (fileMetadata) {
+                    const restrictedUsers = fileMetadata.restrictedUsers
+                        ? fileMetadata.restrictedUsers
+                              .split(',')
+                              .map((id) => id.trim())
+                        : []
 
-                // Generate the view URL and open the file
+                    if (restrictedUsers.includes(`user:${userId}`)) {
+                        // Show toast error if the user is restricted
+                        toast.error(
+                            'You do not have permission to view this file.'
+                        )
+                        return
+                    }
+
+                    // Log the view if the user is not restricted
+                    await logFileView(selectedFile.id, userId, department)
+                }
+
+                // Generate the view URL and open the file, even if metadata is missing
                 const viewUrl = `http://localhost/v1/storage/buckets/${appwriteConfig.storageId}/files/${selectedFile.fileId}/view?project=${appwriteConfig.projectId}`
                 window.open(viewUrl, '_blank')
             } else {
-                toast.error('Selected file does not have a valid fileId.')
+                toast.error('No file selected.')
             }
         } catch (error) {
-            console.error('Error viewing file:', error.message)
-            toast.error(
-                error.message || 'An error occurred while viewing the file.'
-            )
+            toast.error('An error occurred while trying to view the file.')
+            console.error('Error viewing file:', error)
         }
     }
 

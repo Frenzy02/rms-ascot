@@ -180,7 +180,7 @@ export const uploadFile = async (
             )
         }
 
-        // Set the MIME type manually (use correct MIME types for the files)
+        // Set the MIME type manually
         const fileMimeType =
             fileType === 'PDF'
                 ? 'application/pdf'
@@ -195,15 +195,16 @@ export const uploadFile = async (
                 Permission.read(Role.user(userId)),
                 Permission.write(Role.user(userId))
             ],
-            fileMimeType // Explicitly set the MIME type for .docx or .pdf
+            fileMimeType
         )
 
         // Construct breadcrumb path and metadata
         const breadcrumbString = breadcrumbPath
             .map((folder) => folder.name)
             .join('/')
-        console.log('Breadcrumb path to save:', breadcrumbString) // Debugging log
+        console.log('Breadcrumb path to save:', breadcrumbString)
 
+        const currentDate = new Date().toISOString()
         const fileData = {
             title: fileTitle || file.name,
             description: fileDescription || '',
@@ -215,10 +216,12 @@ export const uploadFile = async (
             controlNumber: controlNumber || 'N/A',
             userId: userId,
             fileId: fileUploaded.$id,
-            path: breadcrumbString, // Save the breadcrumb path
+            path: breadcrumbString,
             restrictedUsers: restrictedUsers.join(','),
             status: 'approved',
-            createdAt: new Date().toISOString()
+            createdAt: currentDate,
+            dateReceived: currentDate, // Set receivedAt to the current date and time
+            approvedAt: currentDate // Set approvedAt to the current date and time
         }
 
         const permissions = [
@@ -508,18 +511,42 @@ export const fetchUserFiles = async (userId) => {
         throw new Error('Failed to fetch user files.')
     }
 }
+export const getFileView = async (fileId) => {
+    try {
+        // Construct the file view URL properly
+        const viewUrl = `http://localhost/v1/storage/buckets/${appwriteConfig.storageId}/files/${fileId}/view?project=${appwriteConfig.projectId}`
 
-// Fetch all files from the uploads files collection
+        // Fetch the file view response
+        const response = await fetch(viewUrl)
+
+        // Check if the response is OK
+        if (!response.ok) {
+            throw new Error('Failed to fetch the file view URL.')
+        }
+
+        return viewUrl // Return the constructed URL
+    } catch (error) {
+        console.error('Error fetching file view URL:', error)
+        throw new Error('Failed to fetch file view URL.')
+    }
+}
+
+// Fetch all files from the uploads files collection with pagination
 export const fetchAllFiles = async () => {
     try {
-        // Fetch all files in the collection without any filters
-        const response = await databases.listDocuments(
+        const allFiles = [] // Array to store all files
+        let offset = 0
+        const limit = 5000 // Limit per batch (adjust if needed)
+
+        // Fetch the first batch of documents
+        let firstBatch = await databases.listDocuments(
             appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId // Replace with your actual uploads files collection ID
+            appwriteConfig.uploadsfilesCollectionId,
+            [Query.limit(limit), Query.offset(offset)]
         )
 
-        // Map the files and ensure controlNumber is included
-        const allFiles = response.documents.map((file) => ({
+        // Map the documents from the first batch and push to allFiles
+        const mapFiles = firstBatch.documents.map((file) => ({
             id: file.$id,
             title: file.title || 'Untitled',
             fileId: file.fileId || file.$id, // Ensure fileId is included
@@ -530,11 +557,44 @@ export const fetchAllFiles = async () => {
             createdAt: file.createdAt || new Date().toISOString(),
             status: file.status || 'pending' // Include status if needed
         }))
+        allFiles.push(...mapFiles)
+
+        // Check if more documents need to be fetched
+        while (firstBatch.documents.length === limit) {
+            offset += limit // Increase the offset for the next batch
+
+            // Fetch the next batch using updated offset
+            const nextBatch = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.limit(limit), Query.offset(offset)]
+            )
+
+            // Map the documents from the next batch and push to allFiles
+            const nextBatchFiles = nextBatch.documents.map((file) => ({
+                id: file.$id,
+                title: file.title || 'Untitled',
+                fileId: file.fileId || file.$id, // Ensure fileId is included
+                description: file.description || '',
+                fileType: file.fileType || 'Unknown',
+                size: file.size || '0 KB',
+                controlNumber: file.controlNumber || '', // Ensure controlNumber is mapped
+                createdAt: file.createdAt || new Date().toISOString(),
+                status: file.status || 'pending' // Include status if needed
+            }))
+            allFiles.push(...nextBatchFiles)
+
+            // If the next batch is smaller than the limit, break the loop
+            if (nextBatch.documents.length < limit) break
+
+            // Update firstBatch for the next iteration
+            firstBatch = nextBatch
+        }
 
         return allFiles
     } catch (error) {
         console.error('Error fetching all files:', error)
-        throw new Error('Failed to fetch files.')
+        throw new Error('Failed to fetch all files.')
     }
 }
 
@@ -584,13 +644,30 @@ export const uploadDocumentRequest = async (file, metadata) => {
 
 export const fetchDocumentRequests = async () => {
     try {
-        // Fetch all document requests (remove status filter)
-        const snapshot = await databases.listDocuments(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId // Fetch all document requests regardless of status
-        )
-        console.log('Document Requests:', snapshot.documents)
-        return snapshot.documents // Return all document requests
+        const allFiles = [] // Array to store all files
+        let offset = 0
+        const limit = 5000 // Limit per batch (adjust if needed)
+        let firstBatch
+
+        // Fetch documents in batches
+        do {
+            firstBatch = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.limit(limit), Query.offset(offset)]
+            )
+
+            // Add fetched documents to the allFiles array
+            allFiles.push(...firstBatch.documents)
+
+            // Update offset for next batch
+            offset += limit
+
+            console.log('Fetched documents batch:', firstBatch.documents)
+        } while (firstBatch.documents.length === limit) // Continue fetching if the batch is full
+
+        console.log('All Document Requests:', allFiles)
+        return allFiles // Return all documents after fetching all batches
     } catch (error) {
         console.error('Error fetching document requests:', error)
         throw new Error('Failed to fetch document requests.')
@@ -602,6 +679,7 @@ export const addDocumentHistory = async ({
     previousHolder,
     currentHolder,
     department,
+    dateReceived,
     status
 }) => {
     try {
@@ -614,14 +692,14 @@ export const addDocumentHistory = async ({
                 previousHolder,
                 currentHolder,
                 department,
-                dateReceived: new Date().toISOString(),
+                dateReceived: dateReceived || new Date().toISOString(), // Use provided date or current time
                 status
             },
             [
-                Permission.read(Role.any()), // Allow any user to read the document
-                Permission.write(Role.any()), // Allow any user to write (update) the document
-                Permission.update(Role.any()), // Allow any user to update the document
-                Permission.delete(Role.any()) // Allow any user to delete the document
+                Permission.read(Role.any()),
+                Permission.write(Role.any()),
+                Permission.update(Role.any()),
+                Permission.delete(Role.any())
             ]
         )
         return response
@@ -665,19 +743,20 @@ export const fetchFileMetadata = async (fileId) => {
     }
 }
 
-export const updateHandleBy = async (fileId, newHolder) => {
+export const updateHandleBy = async (fileId, newHolder, newDateReceived) => {
     try {
         const response = await databases.updateDocument(
             appwriteConfig.databaseId,
             appwriteConfig.uploadsfilesCollectionId,
             fileId,
             {
-                handleBy: newHolder // Make sure you are passing the updated holder here
+                handleBy: newHolder,
+                dateReceived: newDateReceived
             }
         )
         return response
     } catch (error) {
-        console.error('Error updating currentHolder:', error.message)
+        console.error('Error updating current holder and dateReceived:', error)
         throw error
     }
 }
@@ -702,75 +781,39 @@ export const logFileView = async (fileId, userId, department) => {
     }
 }
 
-export const getFilePreview = async (
-    fileId,
-    width = 800,
-    height = 1200,
-    gravity = 'center',
-    quality = 100,
-    borderWidth = 0,
-    borderColor = '#000000',
-    borderRadius = 0,
-    opacity = 100,
-    rotation = 0,
-    background = '',
-    format = 'jpg' // Change to 'pdf' if previewing PDFs
-) => {
-    try {
-        console.log('Fetching file preview with the following parameters:')
-        console.log(`File ID: ${fileId}`)
-        console.log(`Width: ${width}, Height: ${height}`)
-        console.log(`Gravity: ${gravity}, Quality: ${quality}`)
-        console.log(`Border: ${borderWidth}px ${borderColor}`)
-        console.log(`Border Radius: ${borderRadius}, Opacity: ${opacity}`)
-        console.log(`Rotation: ${rotation}, Background: ${background}`)
-        console.log(`Format: ${format}`)
-
-        const result = await storage.getFilePreview(
-            appwriteConfig.storageId, // Your storage ID
-            fileId,
-            width,
-            height,
-            gravity,
-            quality,
-            borderWidth,
-            borderColor,
-            borderRadius,
-            opacity,
-            rotation,
-            background,
-            format
-        )
-
-        console.log('File preview fetched successfully:', result)
-        return result // Return the file preview URL
-    } catch (error) {
-        console.error('Error fetching file preview:', error)
-        throw new Error('Failed to fetch file preview.')
-    }
-}
-
 export const fetchFilesWithViews = async () => {
     try {
-        // Fetch all files from the uploads files collection
-        const filesResponse = await databases.listDocuments(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId
-        )
+        const allFiles = [] // Array to store all files
+        let offset = 0
+        const limit = 5000 // Limit per batch (adjust if needed)
+        let firstBatch
 
-        const files = filesResponse.documents.map((file) => ({
-            fileId: file.$id,
-            title: file.title || 'Untitled',
-            description: file.description || '',
-            fileType: file.fileType || 'Unknown',
-            size: file.size || '0 KB',
-            createdAt: file.createdAt || new Date().toISOString(),
-            views: 0,
-            viewers: []
-        }))
+        // Fetch files in batches
+        do {
+            firstBatch = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.limit(limit), Query.offset(offset)]
+            )
 
-        // For each file, fetch its views from the fileviews collection
-        for (const file of files) {
+            const files = firstBatch.documents.map((file) => ({
+                fileId: file.$id,
+                title: file.title || 'Untitled',
+                description: file.description || '',
+                fileType: file.fileType || 'Unknown',
+                size: file.size || '0 KB',
+                createdAt: file.createdAt || new Date().toISOString(),
+                views: 0,
+                viewers: []
+            }))
+
+            allFiles.push(...files) // Combine the fetched files
+
+            offset += limit // Update offset for the next batch
+        } while (firstBatch.documents.length === limit) // Continue fetching if the batch is full
+
+        // Now, for each file, fetch its views from the fileviews collection
+        for (const file of allFiles) {
             const viewsResponse = await databases.listDocuments(
                 appwriteConfig.databaseId,
                 appwriteConfig.fileViewsCollectionId,
@@ -824,28 +867,10 @@ export const fetchFilesWithViews = async () => {
             file.viewers = file.viewers.filter((viewer) => viewer !== null)
         }
 
-        return files
+        return allFiles // Return all files with their view data
     } catch (error) {
         console.error('Error fetching files with views:', error)
         throw new Error('Failed to fetch files with views.')
-    }
-}
-
-export const getFileView = async (bucketId, fileId) => {
-    try {
-        const response = await storage.getFileView(bucketId, fileId)
-
-        console.log('File view response:', response) // Log the complete response
-
-        // Ensure the response has the href property
-        if (response && response.href) {
-            return response.href // Return the view URL
-        } else {
-            throw new Error('Failed to fetch file view URL.')
-        }
-    } catch (error) {
-        console.error('Error fetching file view:', error)
-        throw new Error('Failed to fetch file view.')
     }
 }
 
@@ -930,29 +955,39 @@ export const fetchUploadsByParentFolder = async (year, month = null) => {
 
 export const fetchUploadsByStatusAndMonth = async (year) => {
     try {
-        // Fetch all files and filter by the selected year
-        const filesResponse = await databases.listDocuments(
-            appwriteConfig.databaseId,
-            appwriteConfig.uploadsfilesCollectionId
-        )
+        const allFiles = [] // Array to store all files
+        let offset = 0
+        const limit = 5000 // Limit per batch (adjust if needed)
+        let firstBatch
 
-        // Filter files by year and group them by month and status
-        const uploadsByStatus = filesResponse.documents.reduce((acc, file) => {
-            const fileYear = new Date(file.createdAt).getFullYear()
+        // Fetch documents in batches
+        do {
+            firstBatch = await databases.listDocuments(
+                appwriteConfig.databaseId,
+                appwriteConfig.uploadsfilesCollectionId,
+                [Query.limit(limit), Query.offset(offset)]
+            )
+
+            allFiles.push(...firstBatch.documents)
+            offset += limit
+        } while (firstBatch.documents.length === limit)
+
+        // Filter files by year and group them by month based on `approvedAt` and `rejectedAt`
+        const uploadsByStatus = allFiles.reduce((acc, file) => {
+            const fileDate = new Date(file.createdAt)
+            const fileYear = fileDate.getFullYear()
+            const month = fileDate.toLocaleString('default', { month: 'short' })
+
             if (fileYear === year) {
-                const month = new Date(file.createdAt).toLocaleString(
-                    'default',
-                    { month: 'short' }
-                )
-
                 if (!acc[month]) {
                     acc[month] = { approved: 0, rejected: 0 }
                 }
 
-                // Increment count based on approval or rejection status
-                if (file.status === 'approved' && file.approvedAt) {
+                // Increment count based on `approvedAt` and `rejectedAt`
+                if (file.approvedAt) {
                     acc[month].approved += 1
-                } else if (file.status === 'rejected' && file.rejectedAt) {
+                }
+                if (file.rejectedAt) {
                     acc[month].rejected += 1
                 }
             }
@@ -966,6 +1001,7 @@ export const fetchUploadsByStatusAndMonth = async (year) => {
         throw new Error('Failed to fetch uploads by status and month.')
     }
 }
+
 export const editFileMetadata = async (fileId, updatedFields) => {
     try {
         // Log the fields being updated
@@ -1050,11 +1086,10 @@ export const handleDocumentRequest = async (documentId, action) => {
             updatedData
         )
 
-        // Delete the file from storage if rejected
-        if (action === 'reject') {
-            await deleteFile(document.fileId, documentId)
-            console.log(`File ${document.fileId} and metadata deleted.`)
-        }
+        // Log success message
+        console.log(
+            `Document ${documentId} status updated to ${updatedData.status}.`
+        )
 
         return response
     } catch (error) {

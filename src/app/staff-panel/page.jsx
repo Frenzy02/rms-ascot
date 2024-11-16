@@ -45,6 +45,7 @@ export default function HomePage() {
     const router = useRouter()
     const [searchTerm, setSearchTerm] = useState('') // Manage search input
     const [searchSuggestions, setSearchSuggestions] = useState([]) // For search suggestions
+    const [sortOption, setSortOption] = useState('A-Z') // New state for sorting
 
     // Fetch userId from session storage
     useEffect(() => {
@@ -341,6 +342,30 @@ export default function HomePage() {
           )
         : userFiles
 
+    // Sort files
+    useEffect(() => {
+        if (sortOption === 'A-Z') {
+            setUserFiles((prevFiles) =>
+                [...prevFiles].sort((a, b) => a.title.localeCompare(b.title))
+            )
+        } else if (sortOption === 'Z-A') {
+            setUserFiles((prevFiles) =>
+                [...prevFiles].sort((a, b) => b.title.localeCompare(a.title))
+            )
+        } else if (sortOption === 'Latest') {
+            setUserFiles((prevFiles) =>
+                [...prevFiles].sort(
+                    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+                )
+            )
+        }
+    }, [sortOption])
+
+    // Handle sorting change
+    const handleSortChange = (e) => {
+        setSortOption(e.target.value)
+    }
+
     return (
         <div className="flex h-screen bg-white">
             <Sidebar
@@ -363,22 +388,35 @@ export default function HomePage() {
                             : 'My Drive'}
                     </h2>
 
+                    {selectedItem === 'My Documents' && (
+                        <div className="flex space-x-4 items-center mb-4">
+                            <select
+                                value={sortOption}
+                                onChange={(e) => setSortOption(e.target.value)}
+                                className="p-2 rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 focus:outline-none">
+                                <option value="A-Z">A-Z</option>
+                                <option value="Z-A">Z-A</option>
+                                <option value="Latest">Latest Upload</option>
+                            </select>
+                        </div>
+                    )}
+
                     {displayedFiles.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1">
                             {displayedFiles.map((file) => (
                                 <Button
                                     key={file.id}
                                     variant="outline"
                                     onClick={() => handleFileClick(file)}
-                                    className="h-32 flex flex-col items-center justify-center text-center p-4 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 bg-blue-500 text-white">
+                                    className="w-40 h-32 flex flex-col items-center justify-center text-center p-2 rounded-md shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 bg-blue-500 text-white">
                                     <div className="bg-white p-2 rounded-full mb-2">
                                         {file.fileType === 'folder' ? (
-                                            <Folder className="w-4 h-4" />
+                                            <Folder className="w-6 h-6 text-blue-500" />
                                         ) : (
-                                            <FileText className="w-4 h-4" />
+                                            <FileText className="w-6 h-6 text-blue-500" />
                                         )}
                                     </div>
-                                    <span className="mt-2 text-sm font-medium">
+                                    <span className="mt-2 text-xs font-medium">
                                         {file.title || 'Untitled'}
                                     </span>
                                 </Button>

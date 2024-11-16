@@ -14,6 +14,7 @@ import {
     updateHandleBy,
     getUserData
 } from '@/services/api/appwrite'
+import { toast } from 'react-toastify'
 
 const QRScanDialog = ({ file, onClose, userId }) => {
     const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
@@ -105,44 +106,45 @@ const QRScanDialog = ({ file, onClose, userId }) => {
         }
     }
 
-    // Handle receiving the file and updating the current holder
-    // Handle receiving the file and updating the current holder
     const handleReceiveFile = async () => {
         if (!file) {
-            alert('No file to receive.')
+            toast.error('No file selected.')
             return
         }
-        try {
-            const metadata = await fetchFileMetadata(file.id)
-            const previousHolderUserId = metadata.handleBy
 
+        try {
+            // Step 1: Fetch current file metadata
+            const fileMetadata = await fetchFileMetadata(file.id)
+            const previousHolderUserId = fileMetadata.handleBy
+            const previousDateReceived =
+                fileMetadata.dateReceived || fileMetadata.createdAt // Use createdAt if dateReceived is missing
+
+            // Step 2: Check if the current user is already the holder
             if (previousHolderUserId === userId) {
-                alert('You are already the current holder of this file.')
+                toast.warn('You are already the current holder of this file.')
                 return
             }
 
-            const updated = await updateHandleBy(file.id, userId)
-
-            if (updated) {
+            // Step 3: Add the previous holder and dateReceived to the document history
+            if (previousHolderUserId) {
                 await addDocumentHistory({
                     fileId: file.id,
                     previousHolder: previousHolderUserId,
                     currentHolder: userId,
-                    department: 'IT Department',
+                    department: 'Your Department', // Update this as needed
+                    dateReceived: previousDateReceived, // Use the previous dateReceived
                     status: 'received'
                 })
-
-                // Directly update the current holder state without refresh
-                const currentUser = await getUserData(userId)
-                setCurrentHolderName(
-                    `${currentUser.firstname} ${currentUser.lastname}`
-                )
-                setIsCurrentHolder(true) // Now the current user is the holder
-
-                alert('File received and history updated successfully.')
             }
+
+            // Step 4: Update the current holder and dateReceived in file metadata
+            const currentDate = new Date().toISOString() // Get the current date and time
+            await updateHandleBy(file.id, userId, currentDate)
+
+            toast.success('File received and history updated successfully.')
         } catch (error) {
-            alert('Failed to receive file.')
+            console.error('Failed to update file holder:', error)
+            toast.error('Failed to update file holder. Please try again.')
         }
     }
 

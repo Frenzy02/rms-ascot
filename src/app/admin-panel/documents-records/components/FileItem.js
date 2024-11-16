@@ -19,12 +19,16 @@ import {
     fetchFileMetadata
 } from '@/services/api/appwrite'
 
+import { getFileView } from '@/services/api/appwrite'
+
 // Main FileItem Component
 export default function FileItem({ file, onDelete }) {
     if (file.status !== 'approved') {
         return null
     }
 
+    const [showPreviewModal, setShowPreviewModal] = useState(false)
+    const [pdfUrl, setPdfUrl] = useState(null)
     const [showActions, setShowActions] = useState(false)
     const actionMenuRef = useRef(null)
     const buttonRef = useRef(null)
@@ -38,6 +42,7 @@ export default function FileItem({ file, onDelete }) {
         controlNumber: file.controlNumber || '',
         restrictedUsers: [] // Initialize restricted users as an empty array
     })
+    const [isLoading, setIsLoading] = useState(false) // Loading state for the PDF
 
     const {
         title = 'Untitled File',
@@ -45,6 +50,40 @@ export default function FileItem({ file, onDelete }) {
         size = 'Unknown Size',
         createdAt
     } = file || {}
+
+    const pdfViewerOptions = {
+        disablePrint: true, // Disable the print button
+        disableDownload: true // Disable the download button
+    }
+    // Function to fetch and preview the PDF
+    const handlePreviewClick = async () => {
+        try {
+            setIsLoading(true) // Show loading state
+
+            if (!file.fileId) {
+                throw new Error('File ID is missing or invalid.')
+            }
+
+            // Fetch the file view URL
+            const url = await getFileView(file.fileId)
+            if (url) {
+                setPdfUrl(url) // Set the URL for the iframe
+                setShowPreviewModal(true) // Show the modal
+            } else {
+                throw new Error('File view URL is undefined or null')
+            }
+        } catch (error) {
+            console.error('Failed to fetch file view URL:', error)
+            toast.error('Failed to load file preview. Please try again.')
+        } finally {
+            setIsLoading(false) // Hide loading state
+        }
+    }
+    // Close the preview modal
+    const closePreviewModal = () => {
+        setShowPreviewModal(false)
+        setPdfUrl(null) // Clear the URL when the modal is closed
+    }
 
     useEffect(() => {
         if (showEditModal) {
@@ -96,7 +135,6 @@ export default function FileItem({ file, onDelete }) {
         }
     }, [showEditModal, file.$id])
 
-    // Pag-handle ng Selection sa ReactSelect
     // Pag-handle ng Selection sa ReactSelect kasama ang Select All
     const RestrictAccessUI = ({
         allUsers,
@@ -257,7 +295,6 @@ export default function FileItem({ file, onDelete }) {
                 </span>
             </div>
             <h3 className="text-lg font-semibold truncate">{title}</h3>
-
             <div className="mt-1 text-xs text-gray-600">
                 <span>{size}</span>
                 <div className="flex items-center mt-1">
@@ -269,14 +306,12 @@ export default function FileItem({ file, onDelete }) {
                     </span>
                 </div>
             </div>
-
             <button
                 ref={buttonRef}
                 className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
                 onClick={() => setShowActions(!showActions)}>
                 <MoreHorizontal className="w-5 h-5" />
             </button>
-
             {showActions &&
                 ReactDOM.createPortal(
                     <div
@@ -287,9 +322,11 @@ export default function FileItem({ file, onDelete }) {
                             top: menuPosition.top,
                             left: menuPosition.left
                         }}>
-                        <button className="flex items-center w-full py-2 px-3 hover:bg-gray-100">
-                            <Eye className="w-4 h-4 mr-2 text-blue-500" />
-                            <span>View</span>
+                        <button
+                            className="flex items-center w-full py-2 px-3 hover:bg-gray-100"
+                            onClick={handlePreviewClick}>
+                            <Eye className="w-4 h-4 mr-2 text-blue-500" />{' '}
+                            <span>Preview</span>
                         </button>
                         <button
                             className="flex items-center w-full py-2 px-3 hover:bg-gray-100"
@@ -311,6 +348,49 @@ export default function FileItem({ file, onDelete }) {
                             <QrCode className="w-4 h-4 mr-2 text-purple-500" />
                             <span>QR Code</span>
                         </button>
+                    </div>,
+                    document.body
+                )}
+            {showPreviewModal &&
+                ReactDOM.createPortal(
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-lg max-w-3xl w-full relative">
+                            <h2 className="text-2xl mb-4">File Preview</h2>
+                            {isLoading ? (
+                                <p>Loading...</p>
+                            ) : pdfUrl ? (
+                                <div
+                                    className="overflow-hidden"
+                                    style={{
+                                        width: '8000px', // Set the width to match your cropped area
+                                        height: '600px', // Set the height to match your cropped area
+                                        position: 'relative'
+                                    }}>
+                                    <iframe
+                                        src={pdfUrl}
+                                        width="1000px" // Larger width to make sure the content overflows
+                                        height="800px" // Larger height to make sure the content overflows
+                                        title="PDF Preview"
+                                        style={{
+                                            position: 'absolute',
+                                            top: '-50px', // Adjust the top value to crop the upper area
+                                            left: '-50px' // Adjust the left value to crop from the sides
+                                        }}
+                                        onLoad={() =>
+                                            console.log(
+                                                'PDF loaded successfully'
+                                            )
+                                        }></iframe>
+                                </div>
+                            ) : (
+                                <p>Failed to load file preview.</p>
+                            )}
+                            <button
+                                className="mt-4 bg-gray-500 text-white px-4 py-2 rounded"
+                                onClick={closePreviewModal}>
+                                Close
+                            </button>
+                        </div>
                     </div>,
                     document.body
                 )}
@@ -398,7 +478,6 @@ export default function FileItem({ file, onDelete }) {
                     </div>,
                     document.body
                 )}
-
             {showDeleteModal &&
                 ReactDOM.createPortal(
                     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">

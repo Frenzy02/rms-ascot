@@ -34,40 +34,32 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
 
     const fetchCurrentHolder = async () => {
         try {
-            if (!selectedFile || !selectedFile.id) {
-                console.error('Invalid file or document ID')
-                setErrorMsg('Invalid file or document ID')
-                return
-            }
+            // Fetch the file metadata from uploadsCollection
+            const fileMetadata = await fetchFileMetadata(
+                selectedFile.id || selectedFile.documentId
+            )
 
-            const fileMetadata = await fetchFileMetadata(selectedFile.id)
-            console.log('File Metadata:', fileMetadata)
-
+            // Extract the handleBy and dateReceived from the file metadata
             const currentHolderUserId = fileMetadata.handleBy
             const currentHolder = await getUserData(currentHolderUserId)
+            const currentDateReceived = fileMetadata.dateReceived
 
+            // Set the current holder's name and received date
             setCurrentHolderName(
                 `${currentHolder.firstname} ${currentHolder.lastname}`
             )
-            setCreatedAt(new Date(fileMetadata.createdAt).toLocaleString())
-
-            const constructedPath = fileMetadata.path || 'Root'
-            setPath(constructedPath)
-
-            const history = await fetchDocumentHistory(selectedFile.id)
-            console.log('Document History:', history)
-
-            const currentHolderEntry = history.find(
-                (entry) => entry.currentHolder === currentHolderUserId
+            setCurrentHolderReceivedDateTime(
+                currentDateReceived
+                    ? new Date(currentDateReceived).toLocaleString()
+                    : 'Unknown'
             )
 
-            if (currentHolderEntry?.dateReceived) {
-                const date = new Date(currentHolderEntry.dateReceived)
-                setCurrentHolderReceivedDateTime(date.toLocaleString())
-            } else {
-                setCurrentHolderReceivedDateTime('Unknown')
-            }
+            // Fetch the document history for previous holders
+            const history = await fetchDocumentHistory(
+                selectedFile.id || selectedFile.documentId
+            )
 
+            // Map history to get previous holders and their dateReceived
             const historyWithNames = await Promise.all(
                 history.map(async (entry) => {
                     const previousHolder = await getUserData(
@@ -81,24 +73,11 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
                     }
                 })
             )
+
             setFileHistory(historyWithNames)
         } catch (error) {
-            console.error('Error fetching document history:', error)
-
-            try {
-                const fileMetadata = await fetchFileMetadata(selectedFile.id)
-                const currentHolder = await getUserData(fileMetadata.handleBy)
-                setCurrentHolderReceivedDateTime(
-                    new Date(fileMetadata.createdAt).toLocaleString()
-                )
-            } catch (fallbackError) {
-                console.error(
-                    'Error fetching metadata as fallback:',
-                    fallbackError
-                )
-                setErrorMsg('Failed to fetch file metadata. Please try again.')
-                toast.error('Failed to fetch file metadata. Please try again.')
-            }
+            console.error('Error fetching document history or metadata:', error)
+            setFileHistory([])
         }
     }
 
@@ -124,7 +103,6 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
                     : []
 
                 if (restrictedUsers.includes(`user:${userId}`)) {
-                    // Show toast error if the user is restricted
                     toast.error('You do not have permission to view this file.')
                     return
                 }

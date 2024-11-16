@@ -9,67 +9,67 @@ import {
     Legend,
     ResponsiveContainer
 } from 'recharts'
-import {
-    fetchUploadsByParentFolder,
-    fetchUploadsByStatusAndMonth
-} from '@/services/api/appwrite'
+import { fetchUploadsByStatusAndMonth } from '@/services/api/appwrite'
 
 export default function DocumentsAnalytics() {
-    const [activeTab, setActiveTab] = useState('Parent Folder')
+    const [activeTab, setActiveTab] = useState('Uploads')
     const [year, setYear] = useState(new Date().getFullYear())
-    const [month, setMonth] = useState(null) // Add month state
-    const [folderData, setFolderData] = useState([])
     const [statusData, setStatusData] = useState([])
+    const [loading, setLoading] = useState(true)
 
+    // Array of all month names in order
     const months = [
-        { label: 'All', value: null },
-        { label: 'January', value: 1 },
-        { label: 'February', value: 2 },
-        { label: 'March', value: 3 },
-        { label: 'April', value: 4 },
-        { label: 'May', value: 5 },
-        { label: 'June', value: 6 },
-        { label: 'July', value: 7 },
-        { label: 'August', value: 8 },
-        { label: 'September', value: 9 },
-        { label: 'October', value: 10 },
-        { label: 'November', value: 11 },
-        { label: 'December', value: 12 }
+        'Jan.',
+        'Feb.',
+        'Mar.',
+        'April',
+        'May',
+        'June',
+        'July',
+        'Aug.',
+        'Sept.',
+        'Oct.',
+        'Nov.',
+        'Dec.'
     ]
 
     useEffect(() => {
-        const fetchFolderData = async () => {
-            if (activeTab === 'Parent Folder') {
-                try {
-                    const data = await fetchUploadsByParentFolder(year, month)
-                    const formattedData = Object.keys(data).map((folderId) => {
-                        const folder = data[folderId]
-                        return { name: folder.name, ...folder.months }
-                    })
-                    console.log('Formatted Folder Data:', formattedData) // Debug log
-                    setFolderData(formattedData)
-                } catch (error) {
-                    console.error('Failed to fetch folder data:', error)
-                }
-            } else if (activeTab === 'Uploads') {
-                try {
+        const fetchData = async () => {
+            setLoading(true)
+            try {
+                if (activeTab === 'Uploads') {
                     const data = await fetchUploadsByStatusAndMonth(year)
-                    const formattedStatusData = Object.keys(data).map(
-                        (month) => ({
+
+                    // Format the status data to cover all months
+                    const formattedStatusData = months.map((month, index) => {
+                        const monthKey = new Date(year, index).toLocaleString(
+                            'default',
+                            { month: 'short' }
+                        )
+
+                        const monthData = data[monthKey] || {
+                            approved: 0,
+                            rejected: 0
+                        }
+
+                        return {
                             month,
-                            approved: data[month].approved,
-                            rejected: data[month].rejected
-                        })
-                    )
-                    console.log('Formatted Status Data:', formattedStatusData) // Debug log
+                            approved: monthData.approved,
+                            rejected: monthData.rejected
+                        }
+                    })
+
                     setStatusData(formattedStatusData)
-                } catch (error) {
-                    console.error('Failed to fetch status data:', error)
                 }
+            } catch (error) {
+                console.error('Failed to fetch status data:', error)
+            } finally {
+                setLoading(false)
             }
         }
-        fetchFolderData()
-    }, [year, month, activeTab])
+
+        fetchData()
+    }, [year, activeTab])
 
     return (
         <div className="min-h-screen bg-gray-100 p-8">
@@ -81,16 +81,13 @@ export default function DocumentsAnalytics() {
             </div>
 
             <div className="flex space-x-4 mb-6">
-                {['Uploads'].map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`p-2 rounded-lg ${
-                            activeTab === tab ? 'bg-gray-300' : 'bg-gray-200'
-                        } font-semibold`}>
-                        {tab}
-                    </button>
-                ))}
+                <button
+                    onClick={() => setActiveTab('Uploads')}
+                    className={`p-2 rounded-lg ${
+                        activeTab === 'Uploads' ? 'bg-gray-300' : 'bg-gray-200'
+                    } font-semibold`}>
+                    Uploads
+                </button>
                 <select
                     onChange={(e) => setYear(parseInt(e.target.value))}
                     value={year}
@@ -101,29 +98,32 @@ export default function DocumentsAnalytics() {
                         </option>
                     ))}
                 </select>
-                <select
-                    onChange={(e) => setMonth(parseInt(e.target.value))}
-                    value={month}
-                    className="p-2 border rounded-lg bg-white">
-                    {months.map((m) => (
-                        <option key={m.value} value={m.value}>
-                            {m.label}
-                        </option>
-                    ))}
-                </select>
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-lg">
-                {activeTab === 'Uploads' && (
+                {loading ? (
+                    <div className="flex justify-center items-center min-h-[300px]">
+                        <div className="w-16 h-16 border-4 border-orange-500 border-dashed rounded-full animate-spin"></div>
+                    </div>
+                ) : (
                     <ResponsiveContainer width="100%" height={400}>
                         <BarChart data={statusData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="month" />
+                            <XAxis dataKey="month" interval={0} />{' '}
+                            {/* Force all labels to display */}
                             <YAxis />
                             <Tooltip />
                             <Legend />
-                            <Bar dataKey="approved" fill="#00C49F" />
-                            <Bar dataKey="rejected" fill="#FF8042" />
+                            <Bar
+                                dataKey="approved"
+                                fill="#00C49F"
+                                name="Approved"
+                            />
+                            <Bar
+                                dataKey="rejected"
+                                fill="#FF8042"
+                                name="Rejected"
+                            />
                         </BarChart>
                     </ResponsiveContainer>
                 )}
