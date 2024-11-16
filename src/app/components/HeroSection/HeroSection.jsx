@@ -1,6 +1,6 @@
 'use client'
 import React, { useState } from 'react'
-import Swal from 'sweetalert2'
+
 import { WavyBackground } from './WavyBackground'
 import Modal from './Modal'
 
