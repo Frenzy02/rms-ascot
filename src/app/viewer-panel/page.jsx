@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import Image from 'next/image'
 import {
     Dialog,
     DialogContent,
@@ -245,10 +246,13 @@ export default function ViewerPanel() {
         <div className="relative flex flex-col h-screen bg-gradient-to-br from-indigo-100 to-purple-100 p-6">
             {/* Logo Overlay */}
             <div className="absolute inset-0 flex items-center justify-center z-0">
-                <img
-                    src="ascot.png" // Replace with your logo path
+                <Image
+                    src="/ascot.png" // Make sure the path starts with "/"
                     alt="Logo"
                     className="w-1/2 opacity-10"
+                    width={500} // Specify width
+                    height={500} // Specify height
+                    priority // Use this for important images
                 />
             </div>
 

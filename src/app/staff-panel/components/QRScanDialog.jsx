@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -22,14 +22,8 @@ const QRScanDialog = ({ file, onClose, userId }) => {
     const [currentHolderName, setCurrentHolderName] = useState('')
     const [isCurrentHolder, setIsCurrentHolder] = useState(false)
 
-    useEffect(() => {
-        if (file) {
-            checkIfCurrentHolder()
-        }
-    }, [file])
-
-    // Check if the user is the current holder
-    const checkIfCurrentHolder = async () => {
+    // Use useCallback to make the function stable
+    const checkIfCurrentHolder = useCallback(async () => {
         try {
             const fileMetadata = await fetchFileMetadata(file.id)
             const currentHolderUserId = fileMetadata.handleBy
@@ -49,7 +43,15 @@ const QRScanDialog = ({ file, onClose, userId }) => {
         } catch (error) {
             console.error('Error checking current holder:', error)
         }
-    }
+    }, [file, userId])
+
+    useEffect(() => {
+        if (file) {
+            checkIfCurrentHolder()
+        }
+    }, [file, checkIfCurrentHolder]) // Add checkIfCurrentHolder to dependencies
+
+    // The rest of your code remains the same
 
     // Fetch and display file holder history
     const handleTrackFileHolder = async () => {
@@ -73,7 +75,6 @@ const QRScanDialog = ({ file, onClose, userId }) => {
                 )
                 setFileHistory(historyWithNames)
             } else {
-                // If no history, show the current holder from file metadata
                 const metadata = await fetchFileMetadata(file.id)
                 const currentHolder = await getUserData(metadata.handleBy)
 
@@ -84,11 +85,9 @@ const QRScanDialog = ({ file, onClose, userId }) => {
                     }
                 ])
             }
-
             setHistoryDialogOpen(true)
         } catch (error) {
             console.error('Error fetching document history:', error)
-            // If history fetching fails, display current holder from metadata
             try {
                 const metadata = await fetchFileMetadata(file.id)
                 const currentHolder = await getUserData(metadata.handleBy)
@@ -113,32 +112,28 @@ const QRScanDialog = ({ file, onClose, userId }) => {
         }
 
         try {
-            // Step 1: Fetch current file metadata
             const fileMetadata = await fetchFileMetadata(file.id)
             const previousHolderUserId = fileMetadata.handleBy
             const previousDateReceived =
-                fileMetadata.dateReceived || fileMetadata.createdAt // Use createdAt if dateReceived is missing
+                fileMetadata.dateReceived || fileMetadata.createdAt
 
-            // Step 2: Check if the current user is already the holder
             if (previousHolderUserId === userId) {
                 toast.warn('You are already the current holder of this file.')
                 return
             }
 
-            // Step 3: Add the previous holder and dateReceived to the document history
             if (previousHolderUserId) {
                 await addDocumentHistory({
                     fileId: file.id,
                     previousHolder: previousHolderUserId,
                     currentHolder: userId,
-                    department: 'Your Department', // Update this as needed
-                    dateReceived: previousDateReceived, // Use the previous dateReceived
+                    department: 'Your Department',
+                    dateReceived: previousDateReceived,
                     status: 'received'
                 })
             }
 
-            // Step 4: Update the current holder and dateReceived in file metadata
-            const currentDate = new Date().toISOString() // Get the current date and time
+            const currentDate = new Date().toISOString()
             await updateHandleBy(file.id, userId, currentDate)
 
             toast.success('File received and history updated successfully.')

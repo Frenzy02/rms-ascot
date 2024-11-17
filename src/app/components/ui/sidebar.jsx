@@ -14,6 +14,7 @@ import {
     IconLogout
 } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
+import Image from 'next/image'
 
 const SidebarContext = createContext(undefined)
 
@@ -76,10 +77,11 @@ export const DesktopSidebar = ({ className, children, ...props }) => {
             {...props}>
             <div className="flex items-center justify-center h-16 bg-neutral-800 dark:bg-neutral-800">
                 <div className="flex items-center space-x-2">
-                    <img
+                    <Image
                         src="/ascot.png"
                         alt="ASCOT Clinic Logo"
-                        className="h-8 w-8"
+                        width={32}
+                        height={32}
                     />
                     {open && (
                         <span className="text-xl font-bold text-neutral-200">
@@ -92,10 +94,12 @@ export const DesktopSidebar = ({ className, children, ...props }) => {
             {/* User Profile Section */}
             {open && (
                 <div className="flex items-center p-4 border-t border-neutral-800">
-                    <img
+                    <Image
                         src="/path/to/profile-image.jpg"
                         alt="User Profile"
-                        className="h-8 w-8 rounded-full mr-2"
+                        width={32}
+                        height={32}
+                        className="rounded-full mr-2"
                     />
                     <span className="text-sm text-neutral-300">
                         Aurora State College of Technology
@@ -141,10 +145,11 @@ export const MobileSidebar = ({ className, children, ...props }) => {
                         </div>
                         <div className="flex items-center justify-center mb-4">
                             <div className="flex items-center space-x-2">
-                                <img
+                                <Image
                                     src="/logo.svg"
                                     alt="ASCOT Clinic Logo"
-                                    className="h-8 w-8"
+                                    width={32}
+                                    height={32}
                                 />
                                 <span className="text-xl font-bold text-neutral-200">
                                     Aurora State College of Technology

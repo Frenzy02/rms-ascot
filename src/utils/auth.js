@@ -12,11 +12,12 @@ export const useRequireAuth = () => {
     const [initialized, setInitialized] = useState(false)
     const router = useRouter()
 
+    // Ensure `initialized` is added as a dependency
     useEffect(() => {
         if (!initialized && !isLoading) {
             setInitialized(true)
         }
-    }, [isLoading])
+    }, [isLoading, initialized])
 
     useEffect(() => {
         if (initialized) {

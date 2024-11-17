@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
     Dialog,
     DialogContent,
@@ -26,13 +26,8 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
     const [createdAt, setCreatedAt] = useState('')
     const [path, setPath] = useState('')
 
-    useEffect(() => {
-        if (selectedFile) {
-            fetchCurrentHolder()
-        }
-    }, [selectedFile])
-
-    const fetchCurrentHolder = async () => {
+    // Wrap fetchCurrentHolder in useCallback
+    const fetchCurrentHolder = useCallback(async () => {
         try {
             // Fetch the file metadata from uploadsCollection
             const fileMetadata = await fetchFileMetadata(
@@ -79,7 +74,13 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile }) => {
             console.error('Error fetching document history or metadata:', error)
             setFileHistory([])
         }
-    }
+    }, [selectedFile]) // Add selectedFile as a dependency
+
+    useEffect(() => {
+        if (selectedFile) {
+            fetchCurrentHolder()
+        }
+    }, [selectedFile, fetchCurrentHolder]) // Include fetchCurrentHolder in the dependency array
 
     const handleViewFile = async () => {
         try {

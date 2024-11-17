@@ -1,4 +1,5 @@
 'use client'
+
 import React, { useState, useEffect } from 'react'
 import {
     BarChart,
@@ -18,23 +19,22 @@ export default function DocumentsAnalytics() {
     const [statusData, setStatusData] = useState([])
     const [loading, setLoading] = useState(true)
 
-    // Array of all month names in order
-    const months = [
-        'Jan.',
-        'Feb.',
-        'Mar.',
-        'April',
-        'May',
-        'June',
-        'July',
-        'Aug.',
-        'Sept.',
-        'Oct.',
-        'Nov.',
-        'Dec.'
-    ]
-
     useEffect(() => {
+        const months = [
+            'Jan.',
+            'Feb.',
+            'Mar.',
+            'April',
+            'May',
+            'June',
+            'July',
+            'Aug.',
+            'Sept.',
+            'Oct.',
+            'Nov.',
+            'Dec.'
+        ]
+
         const fetchData = async () => {
             setLoading(true)
             try {
@@ -70,7 +70,7 @@ export default function DocumentsAnalytics() {
         }
 
         fetchData()
-    }, [year, activeTab])
+    }, [year, activeTab]) // Remove `months` from the dependency array
 
     return (
         <div className="min-h-screen bg-gray-100 p-8">
@@ -110,8 +110,7 @@ export default function DocumentsAnalytics() {
                     <ResponsiveContainer width="100%" height={400}>
                         <BarChart data={statusData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="month" interval={0} />{' '}
-                            {/* Force all labels to display */}
+                            <XAxis dataKey="month" interval={0} />
                             <YAxis />
                             <Tooltip />
                             <Legend />

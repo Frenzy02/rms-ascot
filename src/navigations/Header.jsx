@@ -9,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import Image from 'next/image'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -125,7 +126,14 @@ const Header = ({ isLoggedIn, setIsLoggedIn }) => {
         <>
             <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
                 <div className="logo-container">
-                    <img src="/ascot.png" alt="Logo" className="logo-img" />
+                    <Image
+                        src="/ascot.png" // Adjust the path as necessary
+                        alt="Logo"
+                        className="logo-img"
+                        width={50} // Set an appropriate width
+                        height={50} // Set an appropriate height
+                        priority // Use this to ensure the logo loads quickly
+                    />
                     <div className="logo">ASCOT RMS</div>
                 </div>
                 <button
@@ -219,7 +227,6 @@ const Header = ({ isLoggedIn, setIsLoggedIn }) => {
                         <div className="profile-dropdown">
                             <DropdownMenu>
                                 <DropdownMenuTrigger className="profile-icon-desktop">
-                                    {/* Removed profile photo */}
                                     <div className="profile-initials">
                                         {user ? getInitials(user.username) : ''}
                                     </div>

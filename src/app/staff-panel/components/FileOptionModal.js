@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -12,9 +12,10 @@ import {
     fetchFileMetadata,
     getUserData,
     fetchDocumentHistory,
-    logFileView // Import logFileView function
+    logFileView
 } from '@/services/api/appwrite'
 import { appwriteConfig } from '@/services/api/appwrite'
+import Image from 'next/image'
 
 const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
     const [localErrorMsg, setLocalErrorMsg] = useState(errorMsg)
@@ -26,25 +27,15 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
     const [createdAt, setCreatedAt] = useState('')
     const [path, setPath] = useState('')
 
-    useEffect(() => {
-        if (selectedFile) {
-            fetchCurrentHolder()
-        }
-    }, [selectedFile])
-
-    const fetchCurrentHolder = async () => {
+    const fetchCurrentHolder = useCallback(async () => {
         try {
-            // Fetch the file metadata from uploadsCollection
             const fileMetadata = await fetchFileMetadata(
                 selectedFile.id || selectedFile.documentId
             )
-
-            // Extract the handleBy and dateReceived from the file metadata
             const currentHolderUserId = fileMetadata.handleBy
             const currentHolder = await getUserData(currentHolderUserId)
             const currentDateReceived = fileMetadata.dateReceived
 
-            // Set the current holder's name and received date
             setCurrentHolderName(
                 `${currentHolder.firstname} ${currentHolder.lastname}`
             )
@@ -54,12 +45,10 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                     : 'Unknown'
             )
 
-            // Fetch the document history for previous holders
             const history = await fetchDocumentHistory(
                 selectedFile.id || selectedFile.documentId
             )
 
-            // Map history to get previous holders and their dateReceived
             const historyWithNames = await Promise.all(
                 history.map(async (entry) => {
                     const previousHolder = await getUserData(
@@ -79,7 +68,13 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             console.error('Error fetching document history or metadata:', error)
             setFileHistory([])
         }
-    }
+    }, [selectedFile])
+
+    useEffect(() => {
+        if (selectedFile) {
+            fetchCurrentHolder()
+        }
+    }, [selectedFile, fetchCurrentHolder])
 
     const handleViewFile = async () => {
         try {
@@ -94,7 +89,6 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
             if (selectedFile) {
                 let fileMetadata = null
 
-                // Try fetching file metadata, but continue even if it fails
                 try {
                     fileMetadata = await fetchFileMetadata(selectedFile.id)
                     console.log('File Metadata:', fileMetadata)
@@ -104,7 +98,6 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                     )
                 }
 
-                // If metadata is available, check if the user is restricted
                 if (fileMetadata) {
                     const restrictedUsers = fileMetadata.restrictedUsers
                         ? fileMetadata.restrictedUsers
@@ -113,18 +106,15 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                         : []
 
                     if (restrictedUsers.includes(`user:${userId}`)) {
-                        // Show toast error if the user is restricted
                         toast.error(
                             'You do not have permission to view this file.'
                         )
                         return
                     }
 
-                    // Log the view if the user is not restricted
                     await logFileView(selectedFile.id, userId, department)
                 }
 
-                // Generate the view URL and open the file, even if metadata is missing
                 const viewUrl = `http://localhost/v1/storage/buckets/${appwriteConfig.storageId}/files/${selectedFile.fileId}/view?project=${appwriteConfig.projectId}`
                 window.open(viewUrl, '_blank')
             } else {
@@ -149,10 +139,12 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                     <h2 className="text-xl font-semibold text-gray-800 mb-4 text-center">
                         Options for {selectedFile?.title || 'Untitled'}
                     </h2>
-                    <img
+                    <Image
                         src={selectedFile?.qrCodeUrl || ''}
                         alt="QR Code"
-                        className="mx-auto mb-4 border rounded-md w-40 h-40 object-contain"
+                        width={160}
+                        height={160}
+                        className="mx-auto mb-4 border rounded-md object-contain"
                     />
 
                     {/* View and Track File buttons */}
@@ -171,7 +163,6 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                         </Button>
                     </div>
 
-                    {/* Display current holder and received date and time */}
                     <div className="mt-4 text-center">
                         <h3 className="text-sm font-semibold">
                             Current Holder:
@@ -185,20 +176,17 @@ const FileOptionsModal = ({ isOpen, onClose, selectedFile, errorMsg }) => {
                         </p>
                     </div>
 
-                    {/* Display folder path */}
                     <div className="mt-4 text-center">
                         <h3 className="text-sm font-semibold">Folder Path:</h3>
                         <p className="text-gray-500 text-sm">{path}</p>
                     </div>
 
-                    {/* Display error message if exists */}
                     {(localErrorMsg || errorMsg) && (
                         <p className="text-sm text-red-500 mt-2 text-center">
                             {localErrorMsg || errorMsg}
                         </p>
                     )}
 
-                    {/* Close Button */}
                     <Button
                         onClick={onClose}
                         className="mt-4 w-full bg-gray-300 text-gray-800 py-2 rounded-md hover:bg-gray-400 transition-colors">

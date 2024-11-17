@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import {
     Dialog,
@@ -22,14 +22,8 @@ const QRScanDialog = ({ file, onClose, userId }) => {
     const [currentHolderName, setCurrentHolderName] = useState('')
     const [isCurrentHolder, setIsCurrentHolder] = useState(false)
 
-    useEffect(() => {
-        if (file) {
-            checkIfCurrentHolder()
-        }
-    }, [file])
-
-    // Check if the user is the current holder
-    const checkIfCurrentHolder = async () => {
+    // Use useCallback to memoize the function
+    const checkIfCurrentHolder = useCallback(async () => {
         try {
             const fileMetadata = await fetchFileMetadata(file.id)
             const currentHolderUserId = fileMetadata.handleBy
@@ -41,15 +35,17 @@ const QRScanDialog = ({ file, onClose, userId }) => {
             )
 
             // Check if the current user is the current holder
-            if (currentHolderUserId === userId) {
-                setIsCurrentHolder(true)
-            } else {
-                setIsCurrentHolder(false)
-            }
+            setIsCurrentHolder(currentHolderUserId === userId)
         } catch (error) {
             console.error('Error checking current holder:', error)
         }
-    }
+    }, [file, userId]) // Include dependencies
+
+    useEffect(() => {
+        if (file) {
+            checkIfCurrentHolder()
+        }
+    }, [file, checkIfCurrentHolder]) // Include checkIfCurrentHolder in the dependency array
 
     // Fetch and display file holder history
     const handleTrackFileHolder = async () => {

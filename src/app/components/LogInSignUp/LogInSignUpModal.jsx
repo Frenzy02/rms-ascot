@@ -60,14 +60,14 @@ export default function LogInSignUpModal({ onClose }) {
                 if (user) {
                     const userData = await getUserData(user.$id)
                     setAuthUser(userData)
-                    redirectUser(userData.role)
+                    redirectUser(userData.role) // This calls redirectUser
                 }
             } catch (error) {
                 console.error('Error checking auth state:', error)
             }
         }
         checkAuthState()
-    }, [router, setAuthUser])
+    }, [redirectUser, setAuthUser]) // Added redirectUser as a dependency
 
     const handleInputChange = (e) => {
         const { name, value } = e.target
@@ -102,14 +102,17 @@ export default function LogInSignUpModal({ onClose }) {
             : toast.error(response.error)
     }
 
-    const redirectUser = (role) => {
-        const routes = {
-            admin: '/admin-panel',
-            staff: '/staff-panel',
-            viewer: '/viewer-panel'
-        }
-        router.push(routes[role] || '/')
-    }
+    const redirectUser = useCallback(
+        (role) => {
+            const routes = {
+                admin: '/admin-panel',
+                staff: '/staff-panel',
+                viewer: '/viewer-panel'
+            }
+            router.push(routes[role] || '/')
+        },
+        [router]
+    )
 
     const handleFlip = () => setIsFlipped((prev) => !prev)
     const closeModal = () => setIsOpen(false)

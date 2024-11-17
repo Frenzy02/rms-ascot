@@ -20,7 +20,7 @@ import {
     SelectValue
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label' // Add this import
+import { Label } from '@/components/ui/label'
 import CardView from './components/CardView'
 import ListView from './components/ListView'
 import FileItem from './components/FileItem'
@@ -28,22 +28,16 @@ import {
     createFolder,
     fetchFoldersAndFiles,
     getAllUsers,
-    uploadFile
+    uploadFile,
+    deleteFolderAndContents
 } from '@/services/api/appwrite'
-import { toast } from 'react-toastify'
-import { ToastContainer } from 'react-toastify'
-import ReactSelect from 'react-select' // Rename the import to ReactSelect
-
-// Import the deleteFolderAndContents function
-import { deleteFolderAndContents } from '@/services/api/appwrite'
+import { toast, ToastContainer } from 'react-toastify'
+import ReactSelect from 'react-select'
 
 function Breadcrumb({ path, onBack }) {
     return (
         <div className="flex items-center text-sm text-gray-600 mb-4">
-            <ChevronLeft
-                className="cursor-pointer mr-2"
-                onClick={() => onBack()} // Call the back function when the icon is clicked
-            />
+            <ChevronLeft className="cursor-pointer mr-2" onClick={onBack} />
             {path.map((folder, index) => (
                 <React.Fragment key={folder.$id || folder.id}>
                     <span className="text-gray-500">{folder.name}</span>
@@ -58,18 +52,13 @@ function RestrictAccessUI({ allUsers, restrictedUsers, setRestrictedUsers }) {
     const [options, setOptions] = useState([])
 
     useEffect(() => {
-        // Filter the users based on the role being 'staff' or 'viewer'
         const filteredUsers = allUsers.filter(
             (user) => user.role === 'staff' || user.role === 'viewer'
         )
-
-        // Map the filtered users to options for the select dropdown
         const userOptions = filteredUsers.map((user) => ({
             value: user.id,
             label: user.name
         }))
-
-        // Add a "Select All Users" option at the top
         setOptions([
             { value: 'all', label: 'Select All Users' },
             ...userOptions
@@ -77,7 +66,6 @@ function RestrictAccessUI({ allUsers, restrictedUsers, setRestrictedUsers }) {
     }, [allUsers])
 
     const handleSelectionChange = (selectedOptions) => {
-        // Handle the case where "Select All Users" is selected
         if (selectedOptions.some((option) => option.value === 'all')) {
             setRestrictedUsers(allUsers.map((user) => user.id))
         } else {
@@ -85,7 +73,6 @@ function RestrictAccessUI({ allUsers, restrictedUsers, setRestrictedUsers }) {
         }
     }
 
-    // Filter selected options based on the restricted users
     const selectedOptions = options.filter((option) =>
         restrictedUsers.includes(option.value)
     )
@@ -113,7 +100,7 @@ function RestrictAccessUI({ allUsers, restrictedUsers, setRestrictedUsers }) {
     )
 }
 
-export default function DocumentsTab() {
+const DocumentsRecords = () => {
     const [view, setView] = useState('card')
     const [searchTerm, setSearchTerm] = useState('')
     const [sortBy, setSortBy] = useState('name')
@@ -122,115 +109,42 @@ export default function DocumentsTab() {
     const [showAddFolderModal, setShowAddFolderModal] = useState(false)
     const [showAddFileModal, setShowAddFileModal] = useState(false)
     const [newFolderName, setNewFolderName] = useState('')
-    const [newFileName, setNewFileName] = useState('')
-    const [newFileType, setNewFileType] = useState('PDF')
     const [newFileTitle, setNewFileTitle] = useState('')
     const [newFileDescription, setNewFileDescription] = useState('')
-    const [newFileHandleBy, setNewFileHandleBy] = useState('')
+    const [newFileType, setNewFileType] = useState('PDF')
     const [uploadedFile, setUploadedFile] = useState(null)
-    const [dragActive, setDragActive] = useState(false) // Added dragActive state
+    const [dragActive, setDragActive] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [allUsers, setAllUsers] = useState([]) // Initialize allUsers state
+    const [allUsers, setAllUsers] = useState([])
     const [restrictedUsers, setRestrictedUsers] = useState([])
-    const [controlNumber, setControlNumber] = useState('') // Added for manual input
-    const [breadcrumbPath, setBreadcrumbPath] = useState([]) // New state for breadcrumb
+    const [controlNumber, setControlNumber] = useState('')
+    const [breadcrumbPath, setBreadcrumbPath] = useState([])
 
-    // Filter folders based on the search term
-    const filteredFolders = folders.filter((folder) =>
-        folder.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-
-    // Load users and initial folders on component mount
     useEffect(() => {
         const loadUsers = async () => {
-            const users = await getAllUsers()
-            setAllUsers(users)
+            try {
+                const users = await getAllUsers()
+                setAllUsers(users)
+            } catch (error) {
+                console.error('Error loading users:', error)
+            }
         }
+
+        const fetchInitialFolders = async () => {
+            try {
+                const { folders, files } = await fetchFoldersAndFiles(null)
+                setFolders(buildNestedFolderStructure(folders, files))
+                setBreadcrumbPath([])
+                setSelectedFolder(null)
+            } catch (error) {
+                console.error('Error fetching folders:', error)
+            }
+        }
+
         loadUsers()
         fetchInitialFolders()
     }, [])
 
-    // Fetch initial folders and reset the breadcrumb path
-    const fetchInitialFolders = async () => {
-        try {
-            const { folders, files } = await fetchFoldersAndFiles(null)
-            const nestedFolders = buildNestedFolderStructure(folders, files)
-            setFolders(nestedFolders || [])
-            setBreadcrumbPath([])
-            setSelectedFolder(null)
-        } catch (error) {
-            console.error('Error fetching folders:', error)
-        }
-    }
-
-    const selectFolder = async (folder) => {
-        setSelectedFolder(folder)
-        try {
-            // Always fetch the subfolders and files for the clicked folder
-            const { folders: subfolders, files } = await fetchFoldersAndFiles(
-                folder.$id
-            )
-
-            // Update the selected folder with new subfolders and files
-            const updatedFolders = [...folders]
-            const parentFolder = findFolderById(folder.$id, updatedFolders)
-            if (parentFolder) {
-                parentFolder.subfolders = subfolders
-                parentFolder.files = files
-            }
-
-            setFolders(updatedFolders)
-            setBreadcrumbPath((prevPath) => [...prevPath, folder])
-        } catch (error) {
-            console.error('Error fetching subfolders and files:', error)
-        }
-    }
-
-    const handleBack = async () => {
-        if (breadcrumbPath.length > 1) {
-            const newPath = breadcrumbPath.slice(0, -1)
-            setBreadcrumbPath(newPath)
-
-            const folder = newPath[newPath.length - 1]
-            if (folder) {
-                // Fetch content of the previous folder
-                setSelectedFolder(folder)
-                try {
-                    const { folders: subfolders, files } =
-                        await fetchFoldersAndFiles(folder.$id)
-
-                    // Reset and update the folder structure
-                    const updatedFolders = buildNestedFolderStructure(
-                        subfolders,
-                        files
-                    )
-                    setFolders((prevFolders) => {
-                        const newFolders = [...prevFolders]
-                        const parentFolder = findFolderById(
-                            folder.$id,
-                            newFolders
-                        )
-                        if (parentFolder) {
-                            parentFolder.subfolders = subfolders
-                            parentFolder.files = files
-                        }
-                        return newFolders
-                    })
-                } catch (error) {
-                    console.error(
-                        'Error fetching folders for back navigation:',
-                        error
-                    )
-                }
-            } else {
-                fetchInitialFolders()
-            }
-        } else {
-            fetchInitialFolders()
-        }
-    }
-
-    // Build nested folder structure
     const buildNestedFolderStructure = (folders, files) => {
         const folderMap = {}
         const rootFolders = []
@@ -247,17 +161,37 @@ export default function DocumentsTab() {
 
         folders.forEach((folder) => {
             if (folder.parentId) {
-                if (folderMap[folder.parentId]) {
-                    folderMap[folder.parentId].subfolders.push(
-                        folderMap[folder.$id]
-                    )
-                }
+                folderMap[folder.parentId]?.subfolders.push(
+                    folderMap[folder.$id]
+                )
             } else {
                 rootFolders.push(folderMap[folder.$id])
             }
         })
 
         return rootFolders
+    }
+
+    const selectFolder = async (folder) => {
+        setSelectedFolder(folder)
+        setBreadcrumbPath((prev) => [...prev, folder])
+
+        try {
+            const { folders: subfolders, files } = await fetchFoldersAndFiles(
+                folder.$id
+            )
+            setFolders((prev) => {
+                const updatedFolders = [...prev]
+                const parentFolder = findFolderById(folder.$id, updatedFolders)
+                if (parentFolder) {
+                    parentFolder.subfolders = subfolders
+                    parentFolder.files = files
+                }
+                return updatedFolders
+            })
+        } catch (error) {
+            console.error('Error fetching subfolders and files:', error)
+        }
     }
 
     // Helper function to find a folder by its ID
@@ -275,59 +209,15 @@ export default function DocumentsTab() {
         return null
     }
 
-    // Render folders and files
-    const renderFolders = (currentFolders) => {
-        if (!Array.isArray(currentFolders)) return null
-        return currentFolders.map((folder) => (
-            <div
-                key={folder.$id || folder.id} // Ensure a unique key prop
-                className="relative group cursor-pointer"
-                onClick={() => selectFolder(folder)}>
-                {view === 'card' ? (
-                    <CardView folder={folder} />
-                ) : (
-                    <ListView folder={folder} />
-                )}
-                <Trash2
-                    className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 cursor-pointer"
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        openDeleteConfirm(folder)
-                    }}
-                />
-                {folder.subfolders && folder.subfolders.length > 0 && (
-                    <div className="pl-4 mt-2">
-                        {renderFolders(folder.subfolders)}
-                    </div>
-                )}
-                {folder.files && folder.files.length > 0 && (
-                    <div className="pl-4 mt-2">
-                        {folder.files
-                            .filter((file) => file.status === 'approved')
-                            .map((file) => (
-                                <FileItem
-                                    key={file.$id || file.id} // Unique key prop
-                                    file={file}
-                                    onView={() =>
-                                        console.log(`Viewing ${file.name}`)
-                                    }
-                                    onEdit={() =>
-                                        console.log(`Editing ${file.name}`)
-                                    }
-                                    onGenerateQR={() =>
-                                        console.log(
-                                            `Generating QR for ${file.name}`
-                                        )
-                                    }
-                                    onDelete={() =>
-                                        console.log(`Deleting ${file.name}`)
-                                    }
-                                />
-                            ))}
-                    </div>
-                )}
-            </div>
-        ))
+    const handleBack = () => {
+        if (breadcrumbPath.length > 1) {
+            const newPath = breadcrumbPath.slice(0, -1)
+            setBreadcrumbPath(newPath)
+            selectFolder(newPath[newPath.length - 1])
+        } else {
+            setBreadcrumbPath([])
+            setSelectedFolder(null)
+        }
     }
 
     const handleFileUpload = (event) => {
@@ -351,128 +241,100 @@ export default function DocumentsTab() {
 
     const handleAddFile = async () => {
         if (!uploadedFile || !controlNumber.trim()) {
-            alert(
-                'Please select a file to upload and provide a control number.'
-            )
+            toast.error('Please select a file and provide a control number.')
             return
         }
 
-        setIsLoading(true) // Start loading
-
+        setIsLoading(true)
         try {
             const userId = sessionStorage.getItem('userId')
-            const userRole = sessionStorage.getItem('userRole') || ''
-
-            if (!userId) {
-                console.error(
-                    'User ID is missing. Please make sure you are logged in.'
-                )
-                alert('User ID is missing. Please log in again.')
-                setIsLoading(false)
-                return
-            }
-
-            // Construct the breadcrumb path using folder names
+            const parentFolderId = selectedFolder ? selectedFolder.$id : null
             const breadcrumbString = breadcrumbPath
                 .map((folder) => folder.name)
                 .join('/')
-            console.log('Generated Breadcrumb Path:', breadcrumbString) // Debugging log
-
-            const currentDate = new Date()
-            const parentFolderId = selectedFolder ? selectedFolder.$id : null
 
             const fileMetadata = {
                 title: newFileTitle,
                 description: newFileDescription,
                 handleBy: userId,
-                userId: userId,
                 fileType: newFileType,
-                controlNumber: controlNumber,
+                controlNumber,
                 status: 'approved',
-                createdAt: currentDate.toISOString(),
-                approvedAt: currentDate.toISOString(),
-                parentFolderId: parentFolderId || '',
-                path: breadcrumbString // Save the correct breadcrumb path
+                createdAt: new Date().toISOString(),
+                parentFolderId,
+                path: breadcrumbString
             }
 
             const permissions = restrictedUsers.map((id) => `user:${id}`)
-            if (userRole === 'admin') {
-                permissions.push('role:admin')
-            }
-
-            // Pass breadcrumbPath as an argument to uploadFile
-            const newFile = await uploadFile(
+            await uploadFile(
                 uploadedFile,
-                selectedFolder ? selectedFolder.$id : null,
+                selectedFolder?.$id,
                 parentFolderId,
-                fileMetadata.title,
-                fileMetadata.description,
-                fileMetadata.handleBy,
-                fileMetadata.fileType,
-                fileMetadata.userId,
-                fileMetadata.controlNumber,
-                permissions,
-                breadcrumbPath // Pass breadcrumbPath here
+                fileMetadata,
+                permissions
             )
-
-            // Fetch updated folder and file structure
-            const { folders: subfolders, files } = await fetchFoldersAndFiles(
-                selectedFolder.$id
-            )
-            const updatedFolders = buildNestedFolderStructure(subfolders, files)
-
-            setFolders((prevFolders) => {
-                const updatedFolders = [...prevFolders]
-                const parentFolder = findFolderById(
-                    selectedFolder.$id,
-                    updatedFolders
-                )
-                if (parentFolder) {
-                    parentFolder.subfolders = subfolders
-                    parentFolder.files = files
-                }
-                return updatedFolders
-            })
 
             toast.success('File uploaded successfully!')
+            fetchInitialFolders()
             resetFileForm()
             setShowAddFileModal(false)
         } catch (error) {
             console.error('Error adding file:', error)
-            alert('Failed to upload the file. Please try again.')
+            toast.error('Failed to upload the file. Please try again.')
         } finally {
-            setIsLoading(false) // End loading
+            setIsLoading(false)
         }
     }
 
     const resetFileForm = () => {
-        setNewFileName('') // Reset file name
-        setNewFileTitle('') // Reset file title
-        setNewFileDescription('') // Reset description
-        setNewFileHandleBy('') // Reset file handle by
-        setNewFileType('PDF') // Reset file type to default
-        setUploadedFile(null) // Reset the uploaded file
-        setControlNumber('') // Reset control number
-        setRestrictedUsers([]) // Clear restricted users
+        setNewFileTitle('')
+        setNewFileDescription('')
+        setNewFileType('PDF')
+        setUploadedFile(null)
+        setControlNumber('')
+        setRestrictedUsers([])
     }
-
     const openDeleteConfirm = async (folder) => {
-        const confirmDelete = window.confirm(
-            `Are you sure you want to delete the folder "${folder.name}" and all its contents? This action cannot be undone.`
-        )
-        if (confirmDelete) {
+        if (
+            window.confirm(
+                `Are you sure you want to delete "${folder.name}" and all its contents?`
+            )
+        ) {
             try {
-                // Call the deleteFolderAndContents function
                 await deleteFolderAndContents(folder.$id)
-                toast.success(
-                    `Folder "${folder.name}" and all its contents have been deleted.`
-                )
-                fetchInitialFolders() // Refresh folders list
+                toast.success(`Folder "${folder.name}" deleted.`)
+                fetchInitialFolders()
             } catch (error) {
-                toast.error('Failed to delete folder. Please try again.')
-                console.error('Failed to delete folder:', error) // Log the error for debugging
+                console.error('Failed to delete folder:', error)
+                toast.error('Failed to delete folder.')
             }
         }
+    }
+
+    const renderFolders = (folders) => {
+        return folders.map((folder) => (
+            <div
+                key={folder.$id}
+                className="relative group"
+                onClick={() => selectFolder(folder)}>
+                {view === 'card' ? (
+                    <CardView folder={folder} />
+                ) : (
+                    <ListView folder={folder} />
+                )}
+                <Trash2
+                    className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 cursor-pointer"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        openDeleteConfirm(folder)
+                    }}
+                />
+                {renderFolders(folder.subfolders)}
+                {folder.files.map((file) => (
+                    <FileItem key={file.$id} file={file} />
+                ))}
+            </div>
+        ))
     }
 
     return (
@@ -795,3 +657,4 @@ export default function DocumentsTab() {
         </div>
     )
 }
+export default DocumentsRecords
